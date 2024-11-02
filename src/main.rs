@@ -1,17 +1,14 @@
 mod components;
 mod database;
 mod home;
+mod message;
 
 use crate::components::{Components, CurrentComponent};
+use crate::message::Message;
 use iced::{
     widget::{button, column, container, text, Column},
     Task,
 };
-
-#[derive(Debug, Clone)]
-enum Message {
-    InitializeComponents(Components),
-}
 
 struct Crm {
     current_component: CurrentComponent,
@@ -34,7 +31,11 @@ impl Crm {
         String::from("CRM")
     }
     fn view(&self) -> Column<Message> {
-        column![container("hello")]
+        if self.components.is_none() {
+            column![container("loading")]
+        } else {
+            column![container("hello")]
+        }
     }
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {

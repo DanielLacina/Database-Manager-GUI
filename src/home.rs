@@ -1,4 +1,5 @@
 use crate::database::Repository;
+use crate::message::Message;
 use iced::{
     widget::{button, column, container, text, Column},
     Task,
@@ -14,5 +15,9 @@ impl Home {
         Self {
             repository: repository.clone(),
         }
+    }
+
+    pub fn content(&self) -> Column<Message> {
+        column!(container("home screen"))
     }
 }
