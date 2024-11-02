@@ -1,6 +1,8 @@
+mod components;
 mod database;
+mod home;
 
-use crate::database::Repository;
+use crate::components::{Components, CurrentComponent};
 use iced::{
     widget::{button, column, container, text, Column},
     Task,
@@ -8,19 +10,23 @@ use iced::{
 
 #[derive(Debug, Clone)]
 enum Message {
-    InitializeRepository(Repository),
+    InitializeComponents(Components),
 }
 
 struct Crm {
-    repository: Option<Repository>,
+    current_component: CurrentComponent,
+    components: Option<Components>,
 }
 
 impl Crm {
     fn new() -> (Self, Task<Message>) {
         (
-            Self { repository: None },
-            Task::perform(Repository::new(), |repository| {
-                Message::InitializeRepository(repository)
+            Self {
+                current_component: CurrentComponent::Home,
+                components: None,
+            },
+            Task::perform(Components::new(), |components| {
+                Message::InitializeComponents(components)
             }),
         )
     }
@@ -32,8 +38,8 @@ impl Crm {
     }
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::InitializeRepository(repository) => {
-                self.repository = Some(repository);
+            Message::InitializeComponents(components) => {
+                self.components = Some(components);
                 Task::none()
             }
         }
