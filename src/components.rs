@@ -8,7 +8,7 @@ pub enum CurrentComponent {
 
 #[derive(Debug, Clone)]
 pub struct Components {
-    home: Home,
+    pub home: Home,
 }
 
 impl Components {
