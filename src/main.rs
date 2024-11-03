@@ -1,3 +1,4 @@
+mod component;
 mod components;
 mod database;
 mod home;
@@ -35,12 +36,12 @@ impl Crm {
     }
     fn view(&self) -> Column<Message> {
         if self.components.is_none() {
-            column![container("loading")]
+            column![container("loading")].into()
         } else {
+            let components = self.components.clone().unwrap();
             match self.current_component {
                 CurrentComponent::Home => {
-                    let home_content = self.components.clone().unwrap().clone().home.content();
-                    column!(container(text(home_content.title))).into()
+                    let home_component = components.home;
                 }
             }
         }

@@ -11,6 +11,10 @@ async fn create_database_pool() -> PgPool {
         .await
         .unwrap()
 }
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct Table {
+    pub name: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct Repository {
@@ -21,5 +25,18 @@ impl Repository {
     pub async fn new() -> Self {
         let pool = create_database_pool().await;
         Self { pool }
+    }
+
+    pub async fn get_tables(&self) -> Result<Vec<Table>, Box<sqlx::Error>> {
+        let res = sqlx::query_as::<_, Table>(
+            "SELECT name
+      FROM information_schema.tables
+     WHERE table_schema='public'
+       AND table_type='BASE TABLE'",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap();
+        Ok(res)
     }
 }
