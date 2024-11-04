@@ -10,7 +10,7 @@ pub struct Home {
 }
 
 impl Component for Home {
-    pub async fn initialize_component(&mut self) {
+    async fn initialize_component(&mut self) {
         self.tables = Some(self.repository.get_tables().await.unwrap());
         self.title = Some(String::from("Home Component"));
     }

@@ -5,9 +5,8 @@ mod home;
 
 use crate::component::Component;
 use crate::components::{Components, CurrentComponent};
-use crate::home::Home;
 use iced::{
-    widget::{button, column, container, row, text, Column, Text},
+    widget::{button, column, container, row, text, Column},
     Element, Task,
 };
 
@@ -15,12 +14,6 @@ use iced::{
 pub enum Message {
     InitializeComponents(Components),
     InitializeHomeComponent,
-    HomeComponentInitialized(Home),
-}
-
-async fn initialize_component<T: Component>(mut component: T) -> T {
-    component.initialize_component().await;
-    component
 }
 
 struct Crm {
@@ -29,14 +22,15 @@ struct Crm {
 }
 
 impl Crm {
-    fn setup() -> (Self, Task<Message>) {
+    fn new() -> (Self, Task<Message>) {
         (
             Self {
                 current_component: CurrentComponent::Home,
                 components: None,
             },
             Task::perform(Components::new(), |components| {
-                Message::InitializeComponents(components)
+                Message::InitializeComponents(components);
+                Message::InitializeHomeComponent
             }),
         )
     }
@@ -52,14 +46,11 @@ impl Crm {
                 CurrentComponent::Home => {
                     let home_component = components.home;
                     if !home_component.tables.is_none() {
-                        Column::with_children(
-                            home_component
-                                .tables
-                                .unwrap_or_default()
-                                .into_iter()
-                                .map(|table| Text::new(table.table_name).into())
-                                .collect::<Vec<_>>(),
-                        )
+                        column!(home_component
+                            .tables
+                            .unwrap()
+                            .iter()
+                            .map(|table| table))
                         .into()
                     } else {
                         column!(text("loading")).into()
@@ -72,19 +63,14 @@ impl Crm {
         match message {
             Message::InitializeComponents(components) => {
                 self.components = Some(components);
-                Task::done(Message::InitializeHomeComponent)
+                Task::none()
             }
             Message::InitializeHomeComponent => {
-                let home_component = self.components.clone().unwrap().home;
+                let mut home_component = self.components.clone().unwrap().home;
                 Task::perform(
-                    async move { initialize_component::<Home>(home_component).await },
-                    |home| Message::HomeComponentInitialized(home),
-                )
-            }
-            Message::HomeComponentInitialized(home) => {
-                if let Some(components) = &mut self.components {
-                    components.home = home;
-                }
+                    async move { home_component.initialize_component().await },
+                    |_| (),
+                );
                 Task::none()
             }
         }
@@ -92,5 +78,5 @@ impl Crm {
 }
 
 fn main() -> iced::Result {
-    iced::application(Crm::title, Crm::update, Crm::view).run_with(Crm::setup)
+    iced::application(Crm::title, Crm::update, Crm::view).run_with(Crm::new)
 }

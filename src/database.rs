@@ -13,7 +13,7 @@ async fn create_database_pool() -> PgPool {
 }
 #[derive(sqlx::FromRow, Debug, Clone)]
 pub struct Table {
-    pub name: String,
+    pub table_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +29,7 @@ impl Repository {
 
     pub async fn get_tables(&self) -> Result<Vec<Table>, Box<sqlx::Error>> {
         let res = sqlx::query_as::<_, Table>(
-            "SELECT name
+            "SELECT table_name
       FROM information_schema.tables
      WHERE table_schema='public'
        AND table_type='BASE TABLE'",
