@@ -1,10 +1,9 @@
-mod business_components;
-mod database;
-mod message;
-mod ui_components;
+mod components;
 
-use crate::component::Component;
-use crate::components::{Components, CurrentComponent};
+use crate::components::ui_components::{
+    components::{CurrentComponent, InitializeComponents, Message, UIComponents},
+    home::HomeUI,
+};
 use iced::{
     widget::{button, column, container, row, text, Column, Text},
     Element, Settings, Task,
@@ -12,8 +11,7 @@ use iced::{
 
 struct Crm {
     current_component: CurrentComponent,
-    business_components: Option<Components>,
-    ui_components: Option,
+    components: Option<UIComponents>,
 }
 
 impl Crm {
@@ -23,7 +21,7 @@ impl Crm {
                 current_component: CurrentComponent::Home,
                 components: None,
             },
-            Task::perform(Components::new(), |components| {
+            Task::perform(UIComponents::new(), |components| {
                 Message::InitializeComponents(components)
             }),
         )

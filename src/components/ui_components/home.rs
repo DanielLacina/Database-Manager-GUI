@@ -1,6 +1,5 @@
-use crate::business_components::home::Home;
-use crate::message::Message;
-use crate::ui_components::components::initialize_component;
+use crate::components::business_components::home::Home;
+use crate::components::ui_components::components::Message;
 use iced::{
     widget::{button, column, container, row, text, Column, Text},
     Element, Settings, Task,
@@ -14,8 +13,8 @@ impl HomeUI {
     pub fn new(home: Home) -> Self {
         Self { home }
     }
-    pub async fn content(&self) -> Element<'_, Message> {
-        let home = initialize_component::<Home>(self.home).await;
+    pub fn content(&self) -> Element<'_, Message> {
+        let home = self.home;
         if !home.tables.is_none() {
             container(Column::with_children(
                 home.tables
