@@ -7,13 +7,15 @@ use iced::{
     Element, Settings, Task,
 };
 
+#[derive(Debug, Clone)]
 pub struct HomeUI {
     pub home: Home,
 }
 
 impl UIComponent for HomeUI {
     async fn initialize_component(&mut self) {
-        let home_business_component = initialize_business_component::<Home>(self.home).await;
+        let home_business_component =
+            initialize_business_component::<Home>(self.home.clone()).await;
         self.home = home_business_component;
     }
 }
@@ -22,8 +24,8 @@ impl HomeUI {
     pub fn new(home: Home) -> Self {
         Self { home }
     }
-    pub fn content(&self) -> Element<'_, Message> {
-        let home = self.home;
+    pub fn content(&self) -> Element<'static, Message> {
+        let home = self.home.clone();
         if !home.tables.is_none() {
             container(Column::with_children(
                 home.tables

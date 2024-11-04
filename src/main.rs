@@ -50,7 +50,7 @@ impl Crm {
                 Task::done(Message::InitializeHomeComponent)
             }
             Message::InitializeHomeComponent => {
-                let home_component = self.components.clone().unwrap().home;
+                let home_component = self.components.clone().unwrap().home_ui;
                 Task::perform(
                     async move { initialize_ui_component::<HomeUI>(home_component).await },
                     |home_ui| Message::HomeComponentInitialized(home_ui),

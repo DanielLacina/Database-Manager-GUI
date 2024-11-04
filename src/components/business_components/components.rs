@@ -1,5 +1,5 @@
-use crate::business_components::database::Repository;
-use crate::business_components::home::Home;
+use crate::components::business_components::database::Repository;
+use crate::components::business_components::home::Home;
 
 #[derive(Debug, Clone)]
 pub struct BusinessComponents {

@@ -15,6 +15,7 @@ pub enum CurrentComponent {
     Home,
 }
 
+#[derive(Debug, Clone)]
 pub struct UIComponents {
     pub home_ui: HomeUI,
 }
