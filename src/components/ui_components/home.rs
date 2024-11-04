@@ -1,5 +1,7 @@
-use crate::components::business_components::home::Home;
-use crate::components::ui_components::components::Message;
+use crate::components::business_components::{
+    component::initialize_business_component, home::Home,
+};
+use crate::components::ui_components::{component::UIComponent, components::Message};
 use iced::{
     widget::{button, column, container, row, text, Column, Text},
     Element, Settings, Task,
@@ -7,6 +9,13 @@ use iced::{
 
 pub struct HomeUI {
     pub home: Home,
+}
+
+impl UIComponent for HomeUI {
+    async fn initialize_component(&mut self) {
+        let home_business_component = initialize_business_component::<Home>(self.home).await;
+        self.home = home_business_component;
+    }
 }
 
 impl HomeUI {

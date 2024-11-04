@@ -1,7 +1,8 @@
 mod components;
 
 use crate::components::ui_components::{
-    components::{CurrentComponent, InitializeComponents, Message, UIComponents},
+    component::initialize_ui_component,
+    components::{CurrentComponent, Message, UIComponents},
     home::HomeUI,
 };
 use iced::{
@@ -36,7 +37,8 @@ impl Crm {
             let components = self.components.clone().unwrap();
             match self.current_component {
                 CurrentComponent::Home => {
-                    let home_component = components.home;
+                    let home_component = components.home_ui;
+                    home_component.content()
                 }
             }
         }
@@ -50,13 +52,13 @@ impl Crm {
             Message::InitializeHomeComponent => {
                 let home_component = self.components.clone().unwrap().home;
                 Task::perform(
-                    async move { initialize_component::<Home>(home_component).await },
-                    |home| Message::HomeComponentInitialized(home),
+                    async move { initialize_ui_component::<HomeUI>(home_component).await },
+                    |home_ui| Message::HomeComponentInitialized(home_ui),
                 )
             }
-            Message::HomeComponentInitialized(home) => {
+            Message::HomeComponentInitialized(home_ui) => {
                 if let Some(components) = &mut self.components {
-                    components.home = home;
+                    components.home_ui = home_ui;
                 }
                 Task::none()
             }

@@ -16,7 +16,7 @@ pub enum CurrentComponent {
 }
 
 pub struct UIComponents {
-    home_ui: HomeUI,
+    pub home_ui: HomeUI,
 }
 
 impl UIComponents {
@@ -26,9 +26,4 @@ impl UIComponents {
             home_ui: HomeUI::new(business_components.home),
         }
     }
-}
-
-pub async fn initialize_component<T: BusinessComponent>(mut business_component: T) -> T {
-    business_component.initialize_component().await;
-    business_component
 }
