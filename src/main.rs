@@ -1,31 +1,19 @@
-mod component;
-mod components;
+mod business_components;
 mod database;
-mod home;
+mod message;
+mod ui_components;
 
 use crate::component::Component;
 use crate::components::{Components, CurrentComponent};
-use crate::home::Home;
 use iced::{
     widget::{button, column, container, row, text, Column, Text},
-    Element, Task,
+    Element, Settings, Task,
 };
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    InitializeComponents(Components),
-    InitializeHomeComponent,
-    HomeComponentInitialized(Home),
-}
-
-async fn initialize_component<T: Component>(mut component: T) -> T {
-    component.initialize_component().await;
-    component
-}
 
 struct Crm {
     current_component: CurrentComponent,
-    components: Option<Components>,
+    business_components: Option<Components>,
+    ui_components: Option,
 }
 
 impl Crm {
@@ -43,7 +31,7 @@ impl Crm {
     fn title(&self) -> String {
         String::from("CRM")
     }
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         if self.components.is_none() {
             column![container("loading")].into()
         } else {
@@ -51,19 +39,6 @@ impl Crm {
             match self.current_component {
                 CurrentComponent::Home => {
                     let home_component = components.home;
-                    if !home_component.tables.is_none() {
-                        Column::with_children(
-                            home_component
-                                .tables
-                                .unwrap_or_default()
-                                .into_iter()
-                                .map(|table| Text::new(table.table_name).into())
-                                .collect::<Vec<_>>(),
-                        )
-                        .into()
-                    } else {
-                        column!(text("loading")).into()
-                    }
                 }
             }
         }
@@ -92,5 +67,7 @@ impl Crm {
 }
 
 fn main() -> iced::Result {
-    iced::application(Crm::title, Crm::update, Crm::view).run_with(Crm::setup)
+    iced::application(Crm::title, Crm::update, Crm::view)
+        .settings(Settings::default())
+        .run_with(Crm::setup)
 }

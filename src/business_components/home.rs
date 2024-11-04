@@ -1,6 +1,5 @@
-use crate::component::Component;
-use crate::database::Repository;
-use crate::database::Table;
+use crate::components::BusinessComponent;
+use crate::database::{Repository, Table};
 
 #[derive(Debug, Clone)]
 pub struct Home {
@@ -9,7 +8,7 @@ pub struct Home {
     pub tables: Option<Vec<Table>>,
 }
 
-impl Component for Home {
+impl BusinessComponent for Home {
     async fn initialize_component(&mut self) {
         self.tables = Some(self.repository.get_tables().await.unwrap());
         self.title = Some(String::from("Home Component"));
