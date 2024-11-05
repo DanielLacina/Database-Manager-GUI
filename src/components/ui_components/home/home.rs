@@ -27,12 +27,12 @@ impl HomeUI {
     }
 
     fn tables(tables: Option<Vec<BusinessTableOut>>) -> Element<'static, Message> {
-        if !tables.is_none() {
+        if let Some(tables) = tables {
             let mut column = Column::new()
                 .height(Length::Fill)
                 .width(Length::Fill)
                 .padding(10);
-            for table in tables.unwrap_or_default() {
+            for table in tables {
                 column = column.push(text(table.table_name));
             }
             scrollable(container(column)).height(250).width(300).into()

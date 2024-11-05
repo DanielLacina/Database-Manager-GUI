@@ -1,7 +1,9 @@
 use crate::components::business_components::{
     component::BusinessComponent, components::BusinessComponents,
 };
-use crate::components::ui_components::home::HomeUI;
+use crate::components::ui_components::home::home::HomeUI;
+
+pub type HomeUIComponent = HomeUI;
 
 #[derive(Debug, Clone)]
 pub enum CurrentComponent {
@@ -10,7 +12,7 @@ pub enum CurrentComponent {
 
 #[derive(Debug, Clone)]
 pub struct UIComponents {
-    pub home_ui: HomeUI,
+    pub home_ui: HomeUIComponent,
 }
 
 impl UIComponents {
