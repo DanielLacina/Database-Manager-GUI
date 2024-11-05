@@ -34,16 +34,12 @@ impl Crm {
         Theme::Dark
     }
     fn view(&self) -> Element<'_, Message> {
-        if self.components.is_none() {
-            column![container("loading")].into()
-        } else {
-            let components = self.components.clone().unwrap();
+        if let Some(components) = &self.components {
             match self.current_component {
-                CurrentComponent::Home => {
-                    let home_component = components.home_ui;
-                    home_component.content()
-                }
+                CurrentComponent::Home => components.home_ui.content(),
             }
+        } else {
+            column![container("loading")].into()
         }
     }
     fn update(&mut self, message: Message) -> Task<Message> {
