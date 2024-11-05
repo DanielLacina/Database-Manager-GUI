@@ -2,7 +2,8 @@ mod components;
 
 use crate::components::ui_components::{
     component::initialize_ui_component,
-    components::{CurrentComponent, Message, UIComponents},
+    components::{CurrentComponent, UIComponents},
+    events::Message,
     home::HomeUI,
 };
 use iced::{

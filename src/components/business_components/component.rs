@@ -11,4 +11,8 @@ pub async fn initialize_business_component<T: BusinessComponent>(mut business_co
     business_component
 }
 
-mod Repository {}
+pub(super) mod repository_module {
+    use crate::components::business_components::database::repository::Repository;
+
+    pub type BusinessRepository = Repository;
+}

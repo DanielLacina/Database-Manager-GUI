@@ -2,7 +2,7 @@ use crate::components::business_components::{
     component::{initialize_business_component, BusinessTableOut},
     home::Home,
 };
-use crate::components::ui_components::{component::UIComponent, components::Message};
+use crate::components::ui_components::{component::UIComponent, events::Message};
 use iced::{
     widget::{button, column, container, row, scrollable, text, Column, Text},
     Alignment, Element, Length,

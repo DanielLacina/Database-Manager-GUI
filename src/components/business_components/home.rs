@@ -1,6 +1,5 @@
-use crate::components::business_components::{
-    component::{BusinessComponent, BusinessTableOut},
-    repository::BusinessRepository,
+use crate::components::business_components::component::{
+    repository_module::BusinessRepository, BusinessComponent, BusinessTableOut,
 };
 
 #[derive(Debug, Clone)]

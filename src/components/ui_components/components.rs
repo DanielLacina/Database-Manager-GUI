@@ -4,13 +4,6 @@ use crate::components::business_components::{
 use crate::components::ui_components::home::HomeUI;
 
 #[derive(Debug, Clone)]
-pub enum Message {
-    InitializeComponents(UIComponents),
-    InitializeHomeComponent,
-    HomeComponentInitialized(HomeUI),
-}
-
-#[derive(Debug, Clone)]
 pub enum CurrentComponent {
     Home,
 }
