@@ -4,7 +4,7 @@ use crate::components::business_components::{
 };
 use crate::components::ui_components::{component::UIComponent, events::Message};
 use iced::{
-    widget::{button, column, container, row, scrollable, text, Column, Text},
+    widget::{button, column, container, scrollable, text, Column, Row, Text},
     Alignment, Element, Length,
 };
 
@@ -45,7 +45,18 @@ impl HomeUI {
         }
     }
 
+    fn title(title: Option<String>) -> Element<'static, Message> {
+        if let Some(title) = title {
+            container(text(title)).into()
+        } else {
+            container(text("Loading")).into()
+        }
+    }
+
     pub fn content(&self) -> Element<'static, Message> {
-        HomeUI::tables(self.home.tables.clone())
+        let mut row = Row::new();
+        row = row.push(HomeUI::tables(self.home.tables.clone()));
+        row = row.push(HomeUI::title(self.home.title.clone()));
+        container(row).into()
     }
 }
