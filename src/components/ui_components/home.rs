@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{initialize_business_component, BusinessTable},
+    component::{initialize_business_component, BusinessTableOut},
     home::Home,
 };
 use crate::components::ui_components::{component::UIComponent, components::Message};
@@ -26,7 +26,7 @@ impl HomeUI {
         Self { home }
     }
 
-    fn tables(tables: Option<Vec<BusinessTable>>) -> Element<'static, Message> {
+    fn tables(tables: Option<Vec<BusinessTableOut>>) -> Element<'static, Message> {
         if !tables.is_none() {
             let mut column = Column::new()
                 .height(Length::Fill)

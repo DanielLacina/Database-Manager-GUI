@@ -1,6 +1,6 @@
-use crate::components::business_components::database::Table;
+use crate::components::business_components::database::models::TableOut;
 
-pub type BusinessTable = Table;
+pub type BusinessTableOut = TableOut;
 
 pub trait BusinessComponent {
     async fn initialize_component(&mut self) {}
@@ -10,3 +10,5 @@ pub async fn initialize_business_component<T: BusinessComponent>(mut business_co
     business_component.initialize_component().await;
     business_component
 }
+
+mod Repository {}

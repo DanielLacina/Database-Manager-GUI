@@ -1,11 +1,13 @@
-use crate::components::business_components::component::{BusinessComponent, BusinessTable};
-use crate::components::business_components::database::Repository;
+use crate::components::business_components::{
+    component::{BusinessComponent, BusinessTableOut},
+    repository::BusinessRepository,
+};
 
 #[derive(Debug, Clone)]
 pub struct Home {
-    repository: Repository,
+    repository: BusinessRepository,
     pub title: Option<String>,
-    pub tables: Option<Vec<BusinessTable>>,
+    pub tables: Option<Vec<BusinessTableOut>>,
 }
 
 impl BusinessComponent for Home {
@@ -16,7 +18,7 @@ impl BusinessComponent for Home {
 }
 
 impl Home {
-    pub fn new(repository: Repository) -> Self {
+    pub fn new(repository: BusinessRepository) -> Self {
         Self {
             repository,
             title: None,
