@@ -7,7 +7,7 @@ use crate::components::ui_components::{
 };
 use iced::{
     widget::{button, column, container, row, text, Column, Text},
-    Element, Settings, Task,
+    Element, Settings, Task, Theme,
 };
 
 struct Crm {
@@ -29,6 +29,9 @@ impl Crm {
     }
     fn title(&self) -> String {
         String::from("CRM")
+    }
+    fn theme(&self) -> Theme {
+        Theme::Dark
     }
     fn view(&self) -> Element<'_, Message> {
         if self.components.is_none() {
@@ -69,5 +72,6 @@ impl Crm {
 fn main() -> iced::Result {
     iced::application(Crm::title, Crm::update, Crm::view)
         .settings(Settings::default())
+        .theme(Crm::theme)
         .run_with(Crm::setup)
 }

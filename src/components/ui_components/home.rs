@@ -1,10 +1,11 @@
 use crate::components::business_components::{
-    component::initialize_business_component, home::Home,
+    component::{initialize_business_component, BusinessTable},
+    home::Home,
 };
 use crate::components::ui_components::{component::UIComponent, components::Message};
 use iced::{
-    widget::{button, column, container, row, text, Column, Text},
-    Element, Settings, Task,
+    widget::{button, column, container, row, scrollable, text, Column, Text},
+    Alignment, Element, Length,
 };
 
 #[derive(Debug, Clone)]
@@ -24,19 +25,27 @@ impl HomeUI {
     pub fn new(home: Home) -> Self {
         Self { home }
     }
-    pub fn content(&self) -> Element<'static, Message> {
-        let home = self.home.clone();
-        if !home.tables.is_none() {
-            container(Column::with_children(
-                home.tables
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|table| Text::new(table.table_name).into())
-                    .collect::<Vec<_>>(),
-            ))
-            .into()
+
+    fn tables(tables: Option<Vec<BusinessTable>>) -> Element<'static, Message> {
+        if !tables.is_none() {
+            let mut column = Column::new()
+                .height(Length::Fill)
+                .width(Length::Fill)
+                .padding(10);
+            for table in tables.unwrap_or_default() {
+                column = column.push(text(table.table_name));
+            }
+            scrollable(container(column)).height(250).width(300).into()
         } else {
-            column!(text("loading")).into()
+            container("Loading")
+                .height(Length::Fill)
+                .width(Length::Fill)
+                .padding(10)
+                .into()
         }
+    }
+
+    pub fn content(&self) -> Element<'static, Message> {
+        HomeUI::tables(self.home.tables.clone())
     }
 }

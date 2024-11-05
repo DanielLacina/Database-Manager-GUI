@@ -1,3 +1,7 @@
+use crate::components::business_components::database::Table;
+
+pub type BusinessTable = Table;
+
 pub trait BusinessComponent {
     async fn initialize_component(&mut self) {}
 }
