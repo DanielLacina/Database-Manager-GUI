@@ -4,7 +4,7 @@ use crate::components::business_components::{
 };
 use crate::components::ui_components::{component::UIComponent, events::Message};
 use iced::{
-    widget::{button, column, container, scrollable, text, Column, Row, Text},
+    widget::{button, column, container, scrollable, text, text_input, Column, Row, Text},
     Alignment, Element, Length,
 };
 
@@ -26,37 +26,42 @@ impl HomeUI {
         Self { home }
     }
 
-    fn tables(tables: Option<Vec<BusinessTableOut>>) -> Element<'static, Message> {
-        if let Some(tables) = tables {
-            let mut column = Column::new()
+    fn tables<'a>(&'a self) -> Element<'a, Message> {
+        let tables_container = if let Some(tables) = &self.home.tables {
+            let mut tables_column = Column::new()
                 .height(Length::Fill)
                 .width(Length::Fill)
                 .padding(10);
+
             for table in tables {
-                column = column.push(text(table.table_name));
+                tables_column = tables_column.push(text(&table.table_name));
             }
-            scrollable(container(column)).height(250).width(300).into()
+            container(tables_column).height(250).width(300) // Wrap tables_column here
         } else {
-            container("Loading")
+            container(text("Loading"))
                 .height(Length::Fill)
                 .width(Length::Fill)
                 .padding(10)
-                .into()
-        }
+        };
+
+        let mut tables_display = Column::new();
+        tables_display = tables_display.push(tables_container); // Populate tables_display with tables_container
+
+        container(tables_display).into()
     }
 
-    fn title(title: Option<String>) -> Element<'static, Message> {
-        if let Some(title) = title {
+    fn title<'a>(&'a self) -> Element<'a, Message> {
+        if let Some(title) = &self.home.title {
             container(text(title)).into()
         } else {
             container(text("Loading")).into()
         }
     }
 
-    pub fn content(&self) -> Element<'static, Message> {
+    pub fn content<'a>(&'a self) -> Element<'a, Message> {
         let mut row = Row::new();
-        row = row.push(HomeUI::tables(self.home.tables.clone()));
-        row = row.push(HomeUI::title(self.home.title.clone()));
+        row = row.push(self.tables());
+        row = row.push(self.title());
         container(row).into()
     }
 }
