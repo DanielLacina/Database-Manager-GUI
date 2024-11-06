@@ -1,6 +1,6 @@
 use crate::components::business_components::{
     component::{initialize_business_component, BusinessTableOut},
-    home::Home,
+    components::BusinessHome,
 };
 use crate::components::ui_components::{component::UIComponent, events::Message};
 use iced::{
@@ -10,19 +10,19 @@ use iced::{
 
 #[derive(Debug, Clone)]
 pub struct HomeUI {
-    pub home: Home,
+    pub home: BusinessHome,
 }
 
 impl UIComponent for HomeUI {
     async fn initialize_component(&mut self) {
         let home_business_component =
-            initialize_business_component::<Home>(self.home.clone()).await;
+            initialize_business_component::<BusinessHome>(self.home.clone()).await;
         self.home = home_business_component;
     }
 }
 
 impl HomeUI {
-    pub fn new(home: Home) -> Self {
+    pub fn new(home: BusinessHome) -> Self {
         Self { home }
     }
 
