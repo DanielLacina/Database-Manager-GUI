@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{initialize_business_component, BusinessTableOut},
+    component::{BusinessComponent, BusinessTableOut},
     components::BusinessHome,
 };
 use crate::components::ui_components::{component::UIComponent, events::Message};
@@ -11,19 +11,21 @@ use iced::{
 #[derive(Debug, Clone)]
 pub struct HomeUI {
     pub home: BusinessHome,
+    pub table_search: String,
 }
 
 impl UIComponent for HomeUI {
     async fn initialize_component(&mut self) {
-        let home_business_component =
-            initialize_business_component::<BusinessHome>(self.home.clone()).await;
-        self.home = home_business_component;
+        self.home.initialize_component().await;
     }
 }
 
 impl HomeUI {
     pub fn new(home: BusinessHome) -> Self {
-        Self { home }
+        Self {
+            home,
+            table_search: String::from(""),
+        }
     }
 
     fn tables<'a>(&'a self) -> Element<'a, Message> {
@@ -36,7 +38,7 @@ impl HomeUI {
             for table in tables {
                 tables_column = tables_column.push(text(&table.table_name));
             }
-            container(tables_column).height(250).width(300) // Wrap tables_column here
+            container(tables_column).height(250).width(300)
         } else {
             container(text("Loading"))
                 .height(Length::Fill)
@@ -44,9 +46,10 @@ impl HomeUI {
                 .padding(10)
         };
 
+        let text_input = text_input("Search", &self.table_search);
         let mut tables_display = Column::new();
-        tables_display = tables_display.push(tables_container); // Populate tables_display with tables_container
-
+        tables_display = tables_display.push(tables_container);
+        tables_display = tables_display.push(text_input);
         container(tables_display).into()
     }
 

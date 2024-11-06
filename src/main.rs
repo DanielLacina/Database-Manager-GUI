@@ -1,7 +1,7 @@
 mod components;
 
 use crate::components::ui_components::{
-    component::initialize_ui_component,
+    component::UIComponent,
     components::{CurrentComponent, HomeUIComponent, UIComponents},
     events::Message,
 };
@@ -49,18 +49,16 @@ impl Crm {
                 Task::done(Message::InitializeHomeComponent)
             }
             Message::InitializeHomeComponent => {
-                let home_component = self.components.clone().unwrap().home_ui;
-                Task::perform(
-                    async move { initialize_ui_component::<HomeUIComponent>(home_component).await },
-                    |home_ui| Message::HomeComponentInitialized(home_ui),
-                )
-            }
-            Message::HomeComponentInitialized(home_ui) => {
                 if let Some(components) = &mut self.components {
-                    components.home_ui = home_ui;
+                    Task::perform(&components.home_ui.initialize_component(), |_| {
+                        Message::HomeComponentInitialized
+                    })
+                } else {
+                    Task::none()
                 }
-                Task::none()
             }
+
+            Message::HomeComponentInitialized => Task::none(),
         }
     }
 }
