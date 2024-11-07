@@ -10,6 +10,7 @@ use iced::Task;
 
 pub type HomeUIComponent = HomeUI;
 
+#[derive(Debug, Clone)]
 pub enum ComponentsMessage {
     InitializeComponents(UIComponents),
 }
@@ -31,12 +32,7 @@ impl UIComponent for UIComponents {
 
     async fn initialize_component(&mut self) {}
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
-        match message {
-            ComponentsMessage::InitializeComponents(ui_components) => {
-                self = Some(ui_components);
-                Task::done(Message::Home(HomeMessage::InitializeComponent))
-            }
-        }
+        Task::none()
     }
 }
 
@@ -46,5 +42,9 @@ impl UIComponents {
         Self {
             home_ui: HomeUI::new(business_components.home),
         }
+    }
+
+    pub fn initialized_task_message() -> Task<Message> {
+        Task::done(Message::Home(HomeMessage::InitializeComponent))
     }
 }

@@ -48,21 +48,18 @@ impl Crm {
                 if let Some(components) = &mut self.components {
                     components.update(components_message)
                 } else {
-                    Task::none()
+                    match components_message {
+                        ComponentsMessage::InitializeComponents(ui_components) => {
+                            self.components = Some(ui_components);
+                            UIComponents::initialized_task_message()
+                        }
+                        _ => Task::none(),
+                    }
                 }
             }
             Message::Home(home_message) => {
-                if let Some(components) = &self.components {
-                    components.home_ui.update(HomeMessage)
-                } else {
-                    Task::none()
-                }
-            }
-
-            Message::HomeComponentInitialized(home_ui) => {
                 if let Some(components) = &mut self.components {
-                    components.home_ui = home_ui;
-                    Task::none()
+                    components.home_ui.update(home_message)
                 } else {
                     Task::none()
                 }

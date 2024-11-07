@@ -2,7 +2,9 @@ use crate::components::business_components::{
     component::{BusinessComponent, BusinessTableOut},
     components::BusinessHome,
 };
-use crate::components::ui_components::{component::UIComponent, home::events::HomeMessage};
+use crate::components::ui_components::{
+    component::UIComponent, events::Message, home::events::HomeMessage,
+};
 use iced::{
     widget::{button, column, container, scrollable, text, text_input, Column, Row, Text},
     Alignment, Element, Length, Task,
@@ -21,30 +23,23 @@ impl UIComponent for HomeUI {
         self.home.initialize_component().await;
     }
 
-    fn update(&mut self, message: Self::EventType) -> Option<Self::EventType> {
+    fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
-            Self::EventType::InitializeHomeComponent => {
-                if let Some(components) = &self.components {
-                    let mut home_ui = components.home_ui.clone();
-                    Task::perform(
-                        async move {
-                            home_ui.initialize_component().await;
-                            home_ui
-                        },
-                        |home_ui| Self::EventType::HomeComponentInitialized(home_ui),
-                    )
-                } else {
-                    Task::none()
-                }
+            Self::EventType::InitializeComponent => {
+                let mut home_ui = self.clone();
+                Task::perform(
+                    async move {
+                        home_ui.initialize_component().await;
+                        home_ui
+                    },
+                    |home_ui_initialized| {
+                        Message::Home(Self::EventType::ComponentInitialized(home_ui_initialized))
+                    },
+                )
             }
-
-            Self::EventType::HomeComponentInitialized(home_ui) => {
-                if let Some(components) = &mut self.components {
-                    components.home_ui = home_ui;
-                    Task::none()
-                } else {
-                    Task::none()
-                }
+            Self::EventType::ComponentInitialized(home_ui_initialized) => {
+                *self = home_ui_initialized;
+                Task::none()
             }
         }
     }
