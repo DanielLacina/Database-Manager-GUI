@@ -2,10 +2,12 @@ use crate::components::business_components::{
     component::{BusinessComponent, BusinessTableOut},
     components::BusinessHome,
 };
-use crate::components::ui_components::{component::UIComponent, events::Message};
+use crate::components::ui_components::{
+    component::UIComponent, events::Message, home::events::HomeMessage,
+};
 use iced::{
     widget::{button, column, container, scrollable, text, text_input, Column, Row, Text},
-    Alignment, Element, Length,
+    Alignment, Element, Length, Task,
 };
 
 #[derive(Debug, Clone)]
@@ -15,8 +17,14 @@ pub struct HomeUI {
 }
 
 impl UIComponent for HomeUI {
+    type EventType = HomeMessage;
+
     async fn initialize_component(&mut self) {
         self.home.initialize_component().await;
+    }
+
+    fn update(message: Self::EventType) -> Option<Self::EventType> {
+        None
     }
 }
 
