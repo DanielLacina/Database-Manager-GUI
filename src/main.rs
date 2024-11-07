@@ -2,7 +2,7 @@ mod components;
 
 use crate::components::ui_components::{
     component::UIComponent,
-    components::{CurrentComponent, UIComponents},
+    components::{ComponentsMessage, CurrentComponent, UIComponents},
     events::Message,
 };
 use iced::{
@@ -23,7 +23,7 @@ impl Crm {
                 components: None,
             },
             Task::perform(UIComponents::new(), |components| {
-                Message::InitializeComponents(components)
+                Message::Components(ComponentsMessage::InitializeComponents(components))
             }),
         )
     }
@@ -44,20 +44,16 @@ impl Crm {
     }
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::InitializeComponents(components) => {
-                self.components = Some(components);
-                Task::done(Message::InitializeHomeComponent)
+            Message::Components(components_message) => {
+                if let Some(components) = &mut self.components {
+                    components.update(components_message)
+                } else {
+                    Task::none()
+                }
             }
-            Message::InitializeHomeComponent => {
+            Message::Home(home_message) => {
                 if let Some(components) = &self.components {
-                    let mut home_ui = components.home_ui.clone();
-                    Task::perform(
-                        async move {
-                            home_ui.initialize_component().await;
-                            home_ui
-                        },
-                        |home_ui| Message::HomeComponentInitialized(home_ui),
-                    )
+                    components.home_ui.update(HomeMessage)
                 } else {
                     Task::none()
                 }

@@ -3,8 +3,8 @@ use crate::components::ui_components::home::home::HomeUI;
 
 #[derive(Debug, Clone)]
 pub enum HomeMessage {
-    InitializeHomeComponent,
-    HomeComponentInitialized(HomeUI),
+    InitializeComponent,
+    ComponentInitialized(HomeUI),
 }
 
 impl Event for HomeMessage {}
