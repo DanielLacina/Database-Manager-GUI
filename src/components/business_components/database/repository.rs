@@ -15,7 +15,7 @@ impl Repository {
         Self { pool }
     }
 
-    pub async fn get_tables(&self) -> Result<Vec<TableOut>, dyn std::error::Error> {
+    pub async fn get_tables(&self) -> Result<Vec<TableOut>, Box<sqlx::Error>> {
         let res = sqlx::query_as::<_, TableOut>(
             "SELECT table_name
       FROM information_schema.tables
