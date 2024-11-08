@@ -10,13 +10,13 @@ use iced::{
     Element, Settings, Task, Theme,
 };
 
-struct Crm {
+pub struct Crm {
     current_component: CurrentComponent,
     components: Option<UIComponents>,
 }
 
 impl Crm {
-    fn setup() -> (Self, Task<Message>) {
+    pub fn setup() -> (Self, Task<Message>) {
         (
             Self {
                 current_component: CurrentComponent::Home,
@@ -27,13 +27,13 @@ impl Crm {
             }),
         )
     }
-    fn title(&self) -> String {
+    pub fn title(&self) -> String {
         String::from("CRM")
     }
-    fn theme(&self) -> Theme {
+    pub fn theme(&self) -> Theme {
         Theme::Dark
     }
-    fn view(&self) -> Element<'_, Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         if let Some(components) = &self.components {
             match self.current_component {
                 CurrentComponent::Home => components.home_ui.content(),
@@ -42,7 +42,7 @@ impl Crm {
             column![container("loading")].into()
         }
     }
-    fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Components(components_message) => {
                 if let Some(components) = &mut self.components {
@@ -67,7 +67,7 @@ impl Crm {
     }
 }
 
-fn main() -> iced::Result {
+pub fn main() -> iced::Result {
     iced::application(Crm::title, Crm::update, Crm::view)
         .settings(Settings::default())
         .theme(Crm::theme)

@@ -1,5 +1,6 @@
 use crate::components::business_components::component::repository_module::BusinessRepository;
 use crate::components::business_components::home::Home;
+use tokio;
 
 pub type BusinessHome = Home;
 
@@ -14,5 +15,15 @@ impl BusinessComponents {
         Self {
             home: BusinessHome::new(repository),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_business_component_initialization() {
+        BusinessComponents::new().await;
     }
 }
