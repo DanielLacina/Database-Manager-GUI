@@ -5,6 +5,7 @@ use crate::components::ui_components::home::home::HomeUI;
 pub enum HomeMessage {
     InitializeComponent,
     ComponentInitialized(HomeUI),
+    TableFilterChanged(String),
 }
 
 impl Event for HomeMessage {}

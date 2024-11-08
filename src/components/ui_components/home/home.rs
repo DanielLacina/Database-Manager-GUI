@@ -9,11 +9,12 @@ use iced::{
     widget::{button, column, container, scrollable, text, text_input, Column, Row, Text},
     Alignment, Element, Length, Task,
 };
+use regex::Regex;
 
 #[derive(Debug, Clone)]
 pub struct HomeUI {
     pub home: BusinessHome,
-    pub table_search: String,
+    pub table_filter: String,
 }
 
 impl UIComponent for HomeUI {
@@ -41,6 +42,10 @@ impl UIComponent for HomeUI {
                 *self = home_ui_initialized;
                 Task::none()
             }
+            Self::EventType::TableFilterChanged(input) => {
+                self.table_filter = input;
+                Task::none()
+            }
         }
     }
 }
@@ -49,7 +54,7 @@ impl HomeUI {
     pub fn new(home: BusinessHome) -> Self {
         Self {
             home,
-            table_search: String::from(""),
+            table_filter: String::from(""),
         }
     }
 
@@ -59,8 +64,16 @@ impl HomeUI {
                 .height(Length::Fill)
                 .width(Length::Fill)
                 .padding(10);
-
-            for table in tables {
+            let table_filter_pattern = Regex::new(&format!(r"(?i){}", &self.table_filter))
+                .unwrap_or_else(|error| {
+                    eprintln!("{}", error);
+                    Regex::new(r"").unwrap()
+                });
+            let tables_filtered: Vec<_> = tables
+                .into_iter()
+                .filter(|table| table_filter_pattern.is_match(&table.table_name))
+                .collect();
+            for table in tables_filtered {
                 tables_column = tables_column.push(text(&table.table_name));
             }
             container(tables_column).height(250).width(300)
@@ -71,7 +84,9 @@ impl HomeUI {
                 .padding(10)
         };
 
-        let text_input = text_input("Search", &self.table_search);
+        let text_input = text_input("Search", &self.table_filter)
+            .on_input(|input| Message::Home(HomeMessage::TableFilterChanged(input)))
+            .width(300);
         let mut tables_display = Column::new();
         tables_display = tables_display.push(tables_container);
         tables_display = tables_display.push(text_input);

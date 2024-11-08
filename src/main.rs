@@ -53,7 +53,6 @@ impl Crm {
                             self.components = Some(ui_components);
                             UIComponents::initialized_task_message()
                         }
-                        _ => Task::none(),
                     }
                 }
             }
