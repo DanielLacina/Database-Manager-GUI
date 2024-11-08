@@ -30,3 +30,25 @@ impl Repository {
 
     pub async fn create_table() {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test]
+    async fn test_get_tables(pool: PgPool) {
+        let repository = Repository { pool };
+
+        sqlx::query!("CREATE TABLE users (name TEXT)")
+            .execute(&repository.pool)
+            .await
+            .unwrap();
+
+        let tables = repository.get_tables().await.unwrap();
+
+        let expected_tables = vec![TableOut {
+            table_name: String::from("users"),
+        }];
+        assert_eq!(tables, expected_tables);
+    }
+}

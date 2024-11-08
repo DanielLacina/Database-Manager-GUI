@@ -1,6 +1,7 @@
 use crate::components::business_components::component::{
     repository_module::BusinessRepository, BusinessComponent, BusinessTableOut,
 };
+use tokio;
 
 #[derive(Debug, Clone)]
 pub struct Home {
@@ -24,4 +25,9 @@ impl Home {
             tables: None,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
 }

@@ -9,6 +9,7 @@ sqlx = { version = "0.8", features = ["postgres", "runtime-tokio"] }
 dotenvy = "0.15"
 regex = "1.11.1"
 tokio = { version = "1", features = ["full"] }
+mockall = "0.13.0"
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3
