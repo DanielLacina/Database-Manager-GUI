@@ -25,3 +25,34 @@ impl Home {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    async fn home_business_component(pool: PgPool) -> Home {
+        let repository = BusinessRepository::new(Some(pool)).await;
+        Home {
+            repository,
+            title: None,
+            tables: None,
+        }
+    }
+
+    #[sqlx::test]
+    async fn test_initialize_home_component(pool: PgPool) {
+        sqlx::query!("CREATE TABLE users (name TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut home = home_business_component(pool).await;
+        home.initialize_component().await;
+        let expected_tables = vec![BusinessTableOut {
+            table_name: String::from("users"),
+        }];
+
+        assert_eq!(home.tables, Some(expected_tables));
+        assert_eq!(home.title, Some(String::from("Home Component")));
+    }
+}

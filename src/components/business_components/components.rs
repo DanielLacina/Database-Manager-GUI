@@ -10,7 +10,7 @@ pub struct BusinessComponents {
 
 impl BusinessComponents {
     pub async fn new() -> Self {
-        let repository = BusinessRepository::new().await;
+        let repository = BusinessRepository::new(None).await;
         Self {
             home: BusinessHome::new(repository),
         }
