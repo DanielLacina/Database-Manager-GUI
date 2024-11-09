@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
     TEXT,
     INT,
@@ -16,11 +17,13 @@ impl fmt::Display for DataType {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Column {
     pub name: String,
     pub data_type: DataType,
 }
 
+#[derive(Debug, Clone)]
 pub struct TableIn {
     pub table_name: String,
     pub columns: Vec<Column>,
