@@ -7,6 +7,12 @@ pub enum DataType {
     DATETIME,
 }
 
+impl Default for DataType {
+    fn default() -> Self {
+        DataType::TEXT
+    }
+}
+
 impl fmt::Display for DataType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -17,13 +23,13 @@ impl fmt::Display for DataType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Column {
     pub name: String,
-    pub data_type: DataType,
+    pub datatype: DataType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct TableIn {
     pub table_name: String,
     pub columns: Vec<Column>,

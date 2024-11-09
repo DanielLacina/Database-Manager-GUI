@@ -70,11 +70,11 @@ mod tests {
             columns: vec![
                 BColumn {
                     name: String::from("username"),
-                    data_type: BDataType::TEXT,
+                    datatype: BDataType::TEXT,
                 },
                 BColumn {
                     name: String::from("password"),
-                    data_type: BDataType::TEXT,
+                    datatype: BDataType::TEXT,
                 },
             ],
         })

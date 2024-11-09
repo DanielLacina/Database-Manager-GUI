@@ -35,7 +35,7 @@ impl Repository {
         let columns_query_list = table_in
             .columns
             .into_iter()
-            .map(|column| format!("{} {}", &column.name, &column.data_type.to_string()))
+            .map(|column| format!("{} {}", &column.name, &column.datatype.to_string()))
             .collect::<Vec<_>>();
         let columns_query_joined = format!("({})", columns_query_list.join(", "));
         sqlx::query(&format!(

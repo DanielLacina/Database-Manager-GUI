@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BDataType, BTable, BTableIn, BusinessComponent},
+    component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
     components::BusinessHome,
 };
 use crate::components::ui_components::{
@@ -14,26 +14,11 @@ use iced::{
 use regex::Regex;
 
 #[derive(Debug, Clone)]
-pub struct ColumnInput {
-    pub name: String,
-    pub datatype: String,
-}
-
-impl Default for ColumnInput {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            datatype: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct HomeUI {
     pub home: BusinessHome,
     pub table_filter: String,
     pub show_create_table_form: bool,
-    pub columns: Vec<ColumnInput>, // New field to store columns
+    pub create_table_input: BTableIn, // New field to store columns
 }
 
 #[derive(Debug, Clone)]
@@ -61,15 +46,15 @@ impl UIComponent for HomeUI {
                         home_ui
                     },
                     |home_ui_initialized| {
-                        Message::Home(Self::EventType::ComponentInitialized(home_ui_initialized))
+                        Message::Home(Self::EventType::ComponentUpdated(home_ui_initialized))
                     },
                 )
             }
-            Self::EventType::ComponentInitialized(home_ui_initialized) => {
-                *self = home_ui_initialized;
+            Self::EventType::ComponentUpdated(home_ui_updated) => {
+                *self = home_ui_updated;
                 Task::none()
             }
-            Self::EventType::TableFilterChanged(input) => {
+            Self::EventType::UpdateTableFilter(input) => {
                 self.table_filter = input;
                 Task::none()
             }
@@ -78,26 +63,45 @@ impl UIComponent for HomeUI {
                 Task::none()
             }
             Self::EventType::AddColumn => {
-                self.columns.push(ColumnInput::default());
+                self.create_table_input.columns.push(BColumn::default());
                 Task::none()
             }
             Self::EventType::RemoveColumn(index) => {
-                if index < self.columns.len() {
-                    self.columns.remove(index);
+                if index < self.create_table_input.columns.len() {
+                    self.create_table_input.columns.remove(index);
                 }
                 Task::none()
             }
             Self::EventType::UpdateColumnName(index, input) => {
-                if let Some(column) = self.columns.get_mut(index) {
+                if let Some(column) = self.create_table_input.columns.get_mut(index) {
                     column.name = input;
                 }
                 Task::none()
             }
             Self::EventType::UpdateColumnType(index, input) => {
-                if let Some(column) = self.columns.get_mut(index) {
+                if let Some(column) = self.create_table_input.columns.get_mut(index) {
                     column.datatype = input;
                 }
                 Task::none()
+            }
+            Self::EventType::UpdateTableName(input) => {
+                self.create_table_input.table_name = input;
+                Task::none()
+            }
+            Self::EventType::SubmitCreateTable => {
+                let mut home_ui = self.clone();
+                let create_table_input = self.create_table_input.clone();
+                self.create_table_input = BTableIn::default();
+                self.show_create_table_form = false;
+                Task::perform(
+                    async move {
+                        home_ui.home.add_table(create_table_input).await;
+                        home_ui
+                    },
+                    |home_ui_updated| {
+                        Message::Home(Self::EventType::ComponentUpdated(home_ui_updated))
+                    },
+                )
             }
         }
     }
@@ -109,7 +113,7 @@ impl HomeUI {
             home,
             table_filter: String::new(),
             show_create_table_form: false,
-            columns: vec![ColumnInput::default()],
+            create_table_input: BTableIn::default(),
         }
     }
 
@@ -119,21 +123,20 @@ impl HomeUI {
             .width(Length::Fill)
             .padding(10)
             .spacing(10);
-
+        let table_name_input = text_input("Table Name", &self.create_table_input.table_name)
+            .on_input(move |value| Message::Home(HomeMessage::UpdateTableName(value)))
+            .width(400);
+        form = form.push(row![table_name_input]);
         // Iterate over existing columns and create input fields for each
-        for (index, column) in self.columns.iter().enumerate() {
+        for (index, column) in self.create_table_input.columns.iter().enumerate() {
             let name_input = text_input("Column Name", &column.name)
                 .on_input(move |value| Message::Home(HomeMessage::UpdateColumnName(index, value)))
                 .width(200);
 
             // Use a PickList for the data type dropdown
             let datatype_input = PickList::new(
-                vec![
-                    BDataType::TEXT.to_string(),
-                    BDataType::INT.to_string(),
-                    BDataType::DATETIME.to_string(),
-                ],
-                Some(column.datatype.clone()),
+                vec![BDataType::TEXT, BDataType::INT, BDataType::DATETIME],
+                Some(&column.datatype),
                 move |value| Message::Home(HomeMessage::UpdateColumnType(index, value)),
             )
             .placeholder("Data Type")
@@ -152,6 +155,11 @@ impl HomeUI {
             .padding(10);
 
         form = form.push(add_column_button);
+
+        let create_table_button = button("Create table")
+            .on_press(Message::Home(HomeMessage::SubmitCreateTable))
+            .padding(10);
+        form = form.push(row![create_table_button]);
         container(form).into()
     }
 
@@ -185,16 +193,19 @@ impl HomeUI {
         };
 
         let text_input = text_input("Search", &self.table_filter)
-            .on_input(|input| Message::Home(HomeMessage::TableFilterChanged(input)))
+            .on_input(|input| Message::Home(HomeMessage::UpdateTableFilter(input)))
             .width(300);
 
         let mut tables_display = Column::new();
         tables_display = tables_display.push(tables_container);
         tables_display = tables_display.push(text_input);
-        let create_table_form_button = button("Show create table form")
-            .on_press(Message::Home(HomeMessage::ShowCreateTableForm));
-
-        tables_display = tables_display.push(create_table_form_button);
+        let show_create_table_form_button = button(if self.show_create_table_form {
+            "Remove create table form"
+        } else {
+            "Show create table form"
+        })
+        .on_press(Message::Home(HomeMessage::ShowCreateTableForm));
+        tables_display = tables_display.push(show_create_table_form_button);
 
         // Conditionally show the form
         if self.show_create_table_form {
