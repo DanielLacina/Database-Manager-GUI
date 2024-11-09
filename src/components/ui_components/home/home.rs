@@ -18,7 +18,7 @@ pub struct HomeUI {
     pub home: BusinessHome,
     pub table_filter: String,
     pub show_create_table_form: bool,
-    pub create_table_input: BTableIn, // New field to store columns
+    pub create_table_input: BTableIn,
 }
 
 #[derive(Debug, Clone)]
@@ -91,11 +91,11 @@ impl UIComponent for HomeUI {
             Self::EventType::SubmitCreateTable => {
                 let mut home_ui = self.clone();
                 let create_table_input = self.create_table_input.clone();
-                self.create_table_input = BTableIn::default();
-                self.show_create_table_form = false;
                 Task::perform(
                     async move {
                         home_ui.home.add_table(create_table_input).await;
+                        home_ui.create_table_input = BTableIn::default();
+                        home_ui.show_create_table_form = false;
                         home_ui
                     },
                     |home_ui_updated| {

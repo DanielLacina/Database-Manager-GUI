@@ -26,8 +26,13 @@ impl Home {
     }
 
     pub async fn add_table(&mut self, table_in: BTableIn) {
-        self.repository.create_table(table_in).await;
-        self.tables = Some(self.repository.get_tables().await.unwrap());
+        if table_in.columns.len() > 0
+            && table_in.columns.iter().all(|column| column.name.len() > 0)
+            && table_in.table_name.len() > 0
+        {
+            self.repository.create_table(table_in).await;
+            self.tables = Some(self.repository.get_tables().await.unwrap());
+        }
     }
 }
 
