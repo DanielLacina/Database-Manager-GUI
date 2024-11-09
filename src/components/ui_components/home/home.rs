@@ -46,12 +46,12 @@ impl UIComponent for HomeUI {
                         home_ui
                     },
                     |home_ui_initialized| {
-                        Message::Home(Self::EventType::ComponentUpdated(home_ui_initialized))
+                        Message::Home(Self::EventType::ComponentInitialized(home_ui_initialized))
                     },
                 )
             }
-            Self::EventType::ComponentUpdated(home_ui_updated) => {
-                *self = home_ui_updated;
+            Self::EventType::ComponentInitialized(home_ui_initialized) => {
+                *self = home_ui_initialized;
                 Task::none()
             }
             Self::EventType::UpdateTableFilter(input) => {
@@ -89,19 +89,21 @@ impl UIComponent for HomeUI {
                 Task::none()
             }
             Self::EventType::SubmitCreateTable => {
-                let mut home_ui = self.clone();
+                let mut home = self.home.clone();
                 let create_table_input = self.create_table_input.clone();
                 Task::perform(
                     async move {
-                        home_ui.home.add_table(create_table_input).await;
-                        home_ui.create_table_input = BTableIn::default();
-                        home_ui.show_create_table_form = false;
-                        home_ui
+                        home.add_table(create_table_input).await;
+                        home
                     },
-                    |home_ui_updated| {
-                        Message::Home(Self::EventType::ComponentUpdated(home_ui_updated))
-                    },
+                    |home| Message::Home(Self::EventType::HomeTablesUpdated(home)),
                 )
+            }
+            Self::EventType::HomeTablesUpdated(home) => {
+                self.home = home;
+                self.show_create_table_form = false;
+                self.create_table_input = BTableIn::default();
+                Task::none()
             }
         }
     }
@@ -117,104 +119,7 @@ impl HomeUI {
         }
     }
 
-    fn create_table_form<'a>(&'a self) -> Element<'a, Message> {
-        let mut form = Column::new()
-            .height(Length::Fill)
-            .width(Length::Fill)
-            .padding(10)
-            .spacing(10);
-        let table_name_input = text_input("Table Name", &self.create_table_input.table_name)
-            .on_input(move |value| Message::Home(HomeMessage::UpdateTableName(value)))
-            .width(400);
-        form = form.push(row![table_name_input]);
-        // Iterate over existing columns and create input fields for each
-        for (index, column) in self.create_table_input.columns.iter().enumerate() {
-            let name_input = text_input("Column Name", &column.name)
-                .on_input(move |value| Message::Home(HomeMessage::UpdateColumnName(index, value)))
-                .width(200);
-
-            // Use a PickList for the data type dropdown
-            let datatype_input = PickList::new(
-                vec![BDataType::TEXT, BDataType::INT, BDataType::DATETIME],
-                Some(&column.datatype),
-                move |value| Message::Home(HomeMessage::UpdateColumnType(index, value)),
-            )
-            .placeholder("Data Type")
-            .width(200);
-
-            let remove_button = button("Remove")
-                .on_press(Message::Home(HomeMessage::RemoveColumn(index)))
-                .padding(5);
-
-            form = form.push(row![name_input, datatype_input, remove_button].spacing(10));
-        }
-
-        // Add button to add new columns
-        let add_column_button = button("Add Column")
-            .on_press(Message::Home(HomeMessage::AddColumn))
-            .padding(10);
-
-        form = form.push(add_column_button);
-
-        let create_table_button = button("Create table")
-            .on_press(Message::Home(HomeMessage::SubmitCreateTable))
-            .padding(10);
-        form = form.push(row![create_table_button]);
-        container(form).into()
-    }
-
-    fn tables<'a>(&'a self) -> Element<'a, Message> {
-        let tables_container = if let Some(tables) = &self.home.tables {
-            let mut tables_column = Column::new()
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .padding(10);
-
-            let table_filter_pattern = Regex::new(&format!(r"(?i){}", &self.table_filter))
-                .unwrap_or_else(|error| {
-                    eprintln!("{}", error);
-                    Regex::new(r"").unwrap()
-                });
-
-            let tables_filtered: Vec<_> = tables
-                .into_iter()
-                .filter(|table| table_filter_pattern.is_match(&table.table_name))
-                .collect();
-
-            for table in tables_filtered {
-                tables_column = tables_column.push(text(&table.table_name));
-            }
-            container(tables_column).height(250).width(300)
-        } else {
-            container(text("Loading"))
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .padding(10)
-        };
-
-        let text_input = text_input("Search", &self.table_filter)
-            .on_input(|input| Message::Home(HomeMessage::UpdateTableFilter(input)))
-            .width(300);
-
-        let mut tables_display = Column::new();
-        tables_display = tables_display.push(tables_container);
-        tables_display = tables_display.push(text_input);
-        let show_create_table_form_button = button(if self.show_create_table_form {
-            "Remove create table form"
-        } else {
-            "Show create table form"
-        })
-        .on_press(Message::Home(HomeMessage::ShowCreateTableForm));
-        tables_display = tables_display.push(show_create_table_form_button);
-
-        // Conditionally show the form
-        if self.show_create_table_form {
-            tables_display = tables_display.push(self.create_table_form());
-        }
-
-        container(tables_display).into()
-    }
-
+    /// Main content function that combines all UI components
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
         let mut row = Row::new();
         row = row.push(self.tables());
@@ -222,11 +127,139 @@ impl HomeUI {
         container(row).into()
     }
 
+    /// Renders the title section
     fn title<'a>(&'a self) -> Element<'a, Message> {
-        if let Some(title) = &self.home.title {
-            container(text(title)).into()
+        let title_text = if let Some(title) = &self.home.title {
+            title
         } else {
-            container(text("Loading")).into()
+            "Loading"
+        };
+        container(text(title_text)).into()
+    }
+
+    /// Renders the tables section with optional filtering and the create table form
+    fn tables<'a>(&'a self) -> Element<'a, Message> {
+        let mut tables_display = Column::new();
+        tables_display = tables_display.push(self.tables_container());
+        tables_display = tables_display.push(self.table_filter_input());
+
+        let show_create_table_form_button = button(if self.show_create_table_form {
+            "Remove create table form"
+        } else {
+            "Show create table form"
+        })
+        .on_press(Message::Home(HomeMessage::ShowCreateTableForm));
+
+        tables_display = tables_display.push(show_create_table_form_button);
+
+        if self.show_create_table_form {
+            tables_display = tables_display.push(self.create_table_form());
         }
+
+        container(tables_display).into()
+    }
+
+    /// Creates the search filter input for filtering tables
+    fn table_filter_input<'a>(&'a self) -> Element<'a, Message> {
+        text_input("Search", &self.table_filter)
+            .on_input(|input| Message::Home(HomeMessage::UpdateTableFilter(input)))
+            .width(300)
+            .into()
+    }
+
+    /// Creates a container to list all tables
+    fn tables_container<'a>(&'a self) -> Element<'a, Message> {
+        if let Some(tables) = &self.home.tables {
+            let mut tables_column = Column::new()
+                .height(Length::Fill)
+                .width(Length::Fill)
+                .padding(10);
+
+            let table_filter_pattern = self.get_table_filter_regex();
+
+            let tables_filtered: Vec<_> = tables
+                .iter()
+                .filter(|table| table_filter_pattern.is_match(&table.table_name))
+                .collect();
+
+            for table in tables_filtered {
+                tables_column = tables_column.push(text(&table.table_name));
+            }
+
+            container(tables_column).height(250).width(300).into()
+        } else {
+            container(text("Loading"))
+                .height(Length::Fill)
+                .width(Length::Fill)
+                .padding(10)
+                .into()
+        }
+    }
+
+    /// Creates a regex pattern for filtering tables
+    fn get_table_filter_regex(&self) -> Regex {
+        Regex::new(&format!(r"(?i){}", &self.table_filter)).unwrap_or_else(|error| {
+            eprintln!("{}", error);
+            Regex::new(r"").unwrap()
+        })
+    }
+
+    /// Creates the form to create a new table
+    fn create_table_form<'a>(&'a self) -> Element<'a, Message> {
+        let mut form = Column::new()
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .padding(10)
+            .spacing(10);
+
+        form = form.push(self.table_name_input());
+
+        for (index, column) in self.create_table_input.columns.iter().enumerate() {
+            form = form.push(self.column_input_row(index, column));
+        }
+
+        let add_column_button = button("Add Column")
+            .on_press(Message::Home(HomeMessage::AddColumn))
+            .padding(10);
+
+        let create_table_button = button("Create table")
+            .on_press(Message::Home(HomeMessage::SubmitCreateTable))
+            .padding(10);
+
+        form = form.push(add_column_button);
+        form = form.push(row![create_table_button]);
+
+        container(form).into()
+    }
+
+    /// Creates the input field for the table name
+    fn table_name_input<'a>(&'a self) -> Element<'a, Message> {
+        text_input("Table Name", &self.create_table_input.table_name)
+            .on_input(|value| Message::Home(HomeMessage::UpdateTableName(value)))
+            .width(400)
+            .into()
+    }
+
+    /// Creates a row of inputs for a column (name, data type, and remove button)
+    fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
+        let name_input = text_input("Column Name", &column.name)
+            .on_input(move |value| Message::Home(HomeMessage::UpdateColumnName(index, value)))
+            .width(200);
+
+        let datatype_input = PickList::new(
+            vec![BDataType::TEXT, BDataType::INT, BDataType::DATETIME],
+            Some(&column.datatype),
+            move |value| Message::Home(HomeMessage::UpdateColumnType(index, value)),
+        )
+        .placeholder("Data Type")
+        .width(200);
+
+        let remove_button = button("Remove")
+            .on_press(Message::Home(HomeMessage::RemoveColumn(index)))
+            .padding(5);
+
+        row![name_input, datatype_input, remove_button]
+            .spacing(10)
+            .into()
     }
 }
