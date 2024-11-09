@@ -1,12 +1,12 @@
 use crate::components::business_components::component::{
-    repository_module::BusinessRepository, BusinessComponent, BusinessTableOut,
+    repository_module::BRepository, BColumn, BDataType, BTable, BTableIn, BusinessComponent,
 };
 
 #[derive(Debug, Clone)]
 pub struct Home {
-    repository: BusinessRepository,
+    repository: BRepository,
     pub title: Option<String>,
-    pub tables: Option<Vec<BusinessTableOut>>,
+    pub tables: Option<Vec<BTable>>,
 }
 
 impl BusinessComponent for Home {
@@ -17,12 +17,17 @@ impl BusinessComponent for Home {
 }
 
 impl Home {
-    pub fn new(repository: BusinessRepository) -> Self {
+    pub fn new(repository: BRepository) -> Self {
         Self {
             repository,
             title: None,
             tables: None,
         }
+    }
+
+    pub async fn add_table(&mut self, table_in: BTableIn) {
+        self.repository.create_table(table_in).await;
+        self.tables = Some(self.repository.get_tables().await.unwrap());
     }
 }
 
@@ -32,7 +37,7 @@ mod tests {
     use sqlx::PgPool;
 
     async fn home_business_component(pool: PgPool) -> Home {
-        let repository = BusinessRepository::new(Some(pool)).await;
+        let repository = BRepository::new(Some(pool)).await;
         Home {
             repository,
             title: None,
@@ -48,11 +53,36 @@ mod tests {
             .unwrap();
         let mut home = home_business_component(pool).await;
         home.initialize_component().await;
-        let expected_tables = vec![BusinessTableOut {
+        let expected_tables = vec![BTable {
             table_name: String::from("users"),
         }];
 
         assert_eq!(home.tables, Some(expected_tables));
         assert_eq!(home.title, Some(String::from("Home Component")));
+    }
+
+    #[sqlx::test]
+    async fn test_add_table(pool: PgPool) {
+        let mut home = home_business_component(pool).await;
+        home.initialize_component().await;
+        home.add_table(BTableIn {
+            table_name: String::from("users"),
+            columns: vec![
+                BColumn {
+                    name: String::from("username"),
+                    data_type: BDataType::TEXT,
+                },
+                BColumn {
+                    name: String::from("password"),
+                    data_type: BDataType::TEXT,
+                },
+            ],
+        })
+        .await;
+        let expected_tables = vec![BTable {
+            table_name: String::from("users"),
+        }];
+
+        assert_eq!(home.tables, Some(expected_tables));
     }
 }

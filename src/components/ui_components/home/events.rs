@@ -6,6 +6,7 @@ pub enum HomeMessage {
     InitializeComponent,
     ComponentInitialized(HomeUI),
     TableFilterChanged(String),
+    ShowCreateTableForm,
 }
 
 impl Event for HomeMessage {}

@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BusinessComponent, BusinessTableOut},
+    component::{BTable, BusinessComponent},
     components::BusinessHome,
 };
 use crate::components::ui_components::{
@@ -15,6 +15,7 @@ use regex::Regex;
 pub struct HomeUI {
     pub home: BusinessHome,
     pub table_filter: String,
+    pub show_create_table_form: bool,
 }
 
 impl UIComponent for HomeUI {
@@ -46,6 +47,10 @@ impl UIComponent for HomeUI {
                 self.table_filter = input;
                 Task::none()
             }
+            Self::EventType::ShowCreateTableForm => {
+                self.show_create_table_form = !self.show_create_table_form;
+                Task::none()
+            }
         }
     }
 }
@@ -55,6 +60,7 @@ impl HomeUI {
         Self {
             home,
             table_filter: String::from(""),
+            show_create_table_form: false,
         }
     }
 
@@ -90,6 +96,12 @@ impl HomeUI {
         let mut tables_display = Column::new();
         tables_display = tables_display.push(tables_container);
         tables_display = tables_display.push(text_input);
+        let create_table_form_button = button("Show create table form")
+            .on_press(Message::Home(HomeMessage::ShowCreateTableForm));
+        tables_display = tables_display.push(create_table_form_button);
+        if self.show_create_table_form {
+            tables_display = tables_display.push(container("create table form"));
+        }
         container(tables_display).into()
     }
 

@@ -1,4 +1,4 @@
-use crate::components::business_components::component::repository_module::BusinessRepository;
+use crate::components::business_components::component::repository_module::BRepository;
 use crate::components::business_components::home::Home;
 
 pub type BusinessHome = Home;
@@ -10,7 +10,7 @@ pub struct BusinessComponents {
 
 impl BusinessComponents {
     pub async fn new() -> Self {
-        let repository = BusinessRepository::new(None).await;
+        let repository = BRepository::new(None).await;
         Self {
             home: BusinessHome::new(repository),
         }

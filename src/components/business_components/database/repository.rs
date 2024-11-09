@@ -1,8 +1,7 @@
 use crate::components::business_components::database::{
-    database::create_database_pool, models::TableOut,
+    database::create_database_pool, models::Table, schemas::TableIn,
 };
 use sqlx::PgPool;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Repository {
@@ -19,8 +18,8 @@ impl Repository {
         }
     }
 
-    pub async fn get_tables(&self) -> Result<Vec<TableOut>, Box<sqlx::Error>> {
-        let res = sqlx::query_as::<_, TableOut>(
+    pub async fn get_tables(&self) -> Result<Vec<Table>, Box<sqlx::Error>> {
+        let res = sqlx::query_as::<_, Table>(
             "SELECT table_name
       FROM information_schema.tables
      WHERE table_schema='public'
@@ -32,5 +31,19 @@ impl Repository {
         Ok(res)
     }
 
-    pub async fn create_table() {}
+    pub async fn create_table(&self, table_in: TableIn) {
+        let columns_query_list = table_in
+            .columns
+            .into_iter()
+            .map(|column| format!("{} {}", &column.name, &column.data_type.to_string()))
+            .collect::<Vec<_>>();
+        let columns_query_joined = format!("({})", columns_query_list.join(", "));
+        sqlx::query(&format!(
+            "CREATE TABLE {} {}",
+            &table_in.table_name, &columns_query_joined
+        ))
+        .execute(&self.pool)
+        .await
+        .unwrap();
+    }
 }
