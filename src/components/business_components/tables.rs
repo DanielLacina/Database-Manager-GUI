@@ -38,7 +38,7 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    async fn tables_business_component(pool: PgPool) -> Home {
+    async fn tables_business_component(pool: PgPool) -> Tables {
         let repository = BRepository::new(Some(pool)).await;
         Tables::new(repository)
     }
@@ -56,7 +56,6 @@ mod tests {
         }];
 
         assert_eq!(tables.tables, Some(expected_tables));
-        assert_eq!(tables.title, Some(String::from("Home Component")));
     }
 
     #[sqlx::test]
