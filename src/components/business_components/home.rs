@@ -7,12 +7,10 @@ use crate::components::business_components::component::{
 pub struct Home {
     repository: BRepository,
     pub title: Option<String>,
-    pub tables: Option<Vec<BTable>>,
 }
 
 impl BusinessComponent for Home {
     async fn initialize_component(&mut self) {
-        self.tables = Some(self.repository.get_tables().await.unwrap());
         self.title = Some(String::from("Home Component"));
     }
 }
@@ -22,92 +20,6 @@ impl Home {
         Self {
             repository,
             title: None,
-            tables: None,
         }
-    }
-
-    pub async fn add_table(&mut self, table_in: BTableIn) {
-        self.repository.create_table(table_in).await;
-        self.tables = Some(self.repository.get_tables().await.unwrap());
-    }
-
-    async fn get_table_info(&self, table_name: String) -> Vec<BTableInfo> {
-        self.repository.get_table_info(table_name).await.unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sqlx::PgPool;
-
-    async fn home_business_component(pool: PgPool) -> Home {
-        let repository = BRepository::new(Some(pool)).await;
-        Home::new(repository)
-    }
-
-    #[sqlx::test]
-    async fn test_initialize_home_component(pool: PgPool) {
-        sqlx::query!("CREATE TABLE users (name TEXT)")
-            .execute(&pool)
-            .await
-            .unwrap();
-        let mut home = home_business_component(pool).await;
-        home.initialize_component().await;
-        let expected_tables = vec![BTable {
-            table_name: String::from("users"),
-        }];
-
-        assert_eq!(home.tables, Some(expected_tables));
-        assert_eq!(home.title, Some(String::from("Home Component")));
-    }
-
-    #[sqlx::test]
-    async fn test_add_table(pool: PgPool) {
-        let mut home = home_business_component(pool).await;
-        home.initialize_component().await;
-        home.add_table(BTableIn {
-            table_name: String::from("users"),
-            columns: vec![
-                BColumn {
-                    name: String::from("username"),
-                    datatype: BDataType::TEXT,
-                },
-                BColumn {
-                    name: String::from("password"),
-                    datatype: BDataType::TEXT,
-                },
-                BColumn {
-                    name: String::from("balance"),
-                    datatype: BDataType::INT,
-                },
-                BColumn {
-                    name: String::from("join_date"),
-                    datatype: BDataType::TIMESTAMP,
-                },
-            ],
-        })
-        .await;
-        let expected_tables = vec![BTable {
-            table_name: String::from("users"),
-        }];
-
-        assert_eq!(home.tables, Some(expected_tables));
-    }
-
-    #[sqlx::test]
-    async fn test_get_table_info(pool: PgPool) {
-        sqlx::query!("CREATE TABLE users (name TEXT)")
-            .execute(&pool)
-            .await
-            .unwrap();
-        let home = home_business_component(pool).await;
-        let table_info = home.get_table_info(String::from("users")).await;
-        let expected_table_info = vec![BTableInfo {
-            column_name: String::from("name"),
-            data_type: String::from("text"),
-        }];
-
-        assert_eq!(table_info, expected_table_info);
     }
 }

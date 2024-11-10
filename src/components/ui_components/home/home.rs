@@ -1,6 +1,6 @@
 use crate::components::business_components::{
     component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
-    components::BusinessHome,
+    components::{BusinessHome, BusinessTables},
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
@@ -29,9 +29,7 @@ impl UIComponent for HomeUI {
 
     async fn initialize_component(&mut self) {
         self.home.initialize_component().await;
-        self.tables_ui
-            .initialize_tables(self.home.tables.clone())
-            .await;
+        self.tables_ui.initialize_component().await;
     }
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
@@ -54,32 +52,17 @@ impl UIComponent for HomeUI {
                 *self = home_ui_initialized;
                 Task::none()
             }
-            Self::EventType::SubmitCreateTable(create_table_input) => {
-                let mut home = self.home.clone();
-                Task::perform(
-                    async move {
-                        home.add_table(create_table_input).await;
-                        home
-                    },
-                    |home| Message::Home(Self::EventType::HomeTablesUpdated(home)),
-                )
-            }
-            Self::EventType::HomeTablesUpdated(home) => {
-                self.home = home;
-                Task::done(TablesMessage::message(TablesMessage::TableCreated(
-                    self.home.tables.clone(),
-                )))
-            }
+
             Self::EventType::Tables(tables_message) => self.tables_ui.update(tables_message),
         }
     }
 }
 
 impl HomeUI {
-    pub fn new(home: BusinessHome) -> Self {
+    pub fn new(home: BusinessHome, tables: BusinessTables) -> Self {
         Self {
             home,
-            tables_ui: TablesUI::new(),
+            tables_ui: TablesUI::new(tables),
         }
     }
 
