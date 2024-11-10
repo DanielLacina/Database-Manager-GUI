@@ -8,4 +8,6 @@ pub trait UIComponent {
     fn update(&mut self, message: Self::EventType) -> Task<Message>;
 }
 
-pub trait Event {}
+pub trait Event {
+    fn message(event: Self) -> Message;
+}

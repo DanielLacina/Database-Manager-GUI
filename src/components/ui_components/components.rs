@@ -15,7 +15,11 @@ pub enum ComponentsMessage {
     InitializeComponents(UIComponents),
 }
 
-impl Event for ComponentsMessage {}
+impl Event for ComponentsMessage {
+    fn message(event: Self) -> Message {
+        Message::Components(event)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum CurrentComponent {

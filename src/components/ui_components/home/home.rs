@@ -1,21 +1,27 @@
 use crate::components::business_components::{
-    component::{BTable, BusinessComponent},
+    component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
     components::BusinessHome,
 };
 use crate::components::ui_components::{
-    component::UIComponent, events::Message, home::events::HomeMessage,
+    component::{Event, UIComponent},
+    events::Message,
+    home::{
+        events::{HomeMessage, TablesMessage},
+        tables::TablesUI,
+    },
 };
 use iced::{
-    widget::{button, column, container, scrollable, text, text_input, Column, Row, Text},
-    Alignment, Element, Length, Task,
+    widget::{
+        button, column, container, row, scrollable, text, text_input, Column, PickList, Row, Text,
+    },
+    Alignment, Background, Border, Color, Element, Length, Task, Theme,
 };
 use regex::Regex;
 
 #[derive(Debug, Clone)]
 pub struct HomeUI {
     pub home: BusinessHome,
-    pub table_filter: String,
-    pub show_create_table_form: bool,
+    pub tables_ui: TablesUI,
 }
 
 impl UIComponent for HomeUI {
@@ -23,6 +29,9 @@ impl UIComponent for HomeUI {
 
     async fn initialize_component(&mut self) {
         self.home.initialize_component().await;
+        self.tables_ui
+            .initialize_tables(self.home.tables.clone())
+            .await;
     }
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
@@ -35,7 +44,9 @@ impl UIComponent for HomeUI {
                         home_ui
                     },
                     |home_ui_initialized| {
-                        Message::Home(Self::EventType::ComponentInitialized(home_ui_initialized))
+                        Self::EventType::message(Self::EventType::ComponentInitialized(
+                            home_ui_initialized,
+                        ))
                     },
                 )
             }
@@ -43,14 +54,23 @@ impl UIComponent for HomeUI {
                 *self = home_ui_initialized;
                 Task::none()
             }
-            Self::EventType::TableFilterChanged(input) => {
-                self.table_filter = input;
-                Task::none()
+            Self::EventType::SubmitCreateTable(create_table_input) => {
+                let mut home = self.home.clone();
+                Task::perform(
+                    async move {
+                        home.add_table(create_table_input).await;
+                        home
+                    },
+                    |home| Message::Home(Self::EventType::HomeTablesUpdated(home)),
+                )
             }
-            Self::EventType::ShowCreateTableForm => {
-                self.show_create_table_form = !self.show_create_table_form;
-                Task::none()
+            Self::EventType::HomeTablesUpdated(home) => {
+                self.home = home;
+                Task::done(TablesMessage::message(TablesMessage::TableCreated(
+                    self.home.tables.clone(),
+                )))
             }
+            Self::EventType::Tables(tables_message) => self.tables_ui.update(tables_message),
         }
     }
 }
@@ -59,64 +79,26 @@ impl HomeUI {
     pub fn new(home: BusinessHome) -> Self {
         Self {
             home,
-            table_filter: String::from(""),
-            show_create_table_form: false,
+            tables_ui: TablesUI::new(),
         }
     }
 
-    fn tables<'a>(&'a self) -> Element<'a, Message> {
-        let tables_container = if let Some(tables) = &self.home.tables {
-            let mut tables_column = Column::new()
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .padding(10);
-            let table_filter_pattern = Regex::new(&format!(r"(?i){}", &self.table_filter))
-                .unwrap_or_else(|error| {
-                    eprintln!("{}", error);
-                    Regex::new(r"").unwrap()
-                });
-            let tables_filtered: Vec<_> = tables
-                .into_iter()
-                .filter(|table| table_filter_pattern.is_match(&table.table_name))
-                .collect();
-            for table in tables_filtered {
-                tables_column = tables_column.push(text(&table.table_name));
-            }
-            container(tables_column).height(250).width(300)
-        } else {
-            container(text("Loading"))
-                .height(Length::Fill)
-                .width(Length::Fill)
-                .padding(10)
-        };
-
-        let text_input = text_input("Search", &self.table_filter)
-            .on_input(|input| Message::Home(HomeMessage::TableFilterChanged(input)))
-            .width(300);
-        let mut tables_display = Column::new();
-        tables_display = tables_display.push(tables_container);
-        tables_display = tables_display.push(text_input);
-        let create_table_form_button = button("Show create table form")
-            .on_press(Message::Home(HomeMessage::ShowCreateTableForm));
-        tables_display = tables_display.push(create_table_form_button);
-        if self.show_create_table_form {
-            tables_display = tables_display.push(container("create table form"));
-        }
-        container(tables_display).into()
-    }
-
-    fn title<'a>(&'a self) -> Element<'a, Message> {
-        if let Some(title) = &self.home.title {
-            container(text(title)).into()
-        } else {
-            container(text("Loading")).into()
-        }
-    }
-
+    /// Main content function that combines all UI components
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
-        let mut row = Row::new();
-        row = row.push(self.tables());
-        row = row.push(self.title());
-        container(row).into()
+        self.tables_ui.content()
+    }
+
+    /// Renders the title section
+    fn title<'a>(&'a self) -> Element<'a, Message> {
+        let title_text = if let Some(title) = &self.home.title {
+            title
+        } else {
+            "Loading"
+        };
+        container(text(title_text))
+            .width(300)
+            .height(50)
+            .padding(10)
+            .into()
     }
 }

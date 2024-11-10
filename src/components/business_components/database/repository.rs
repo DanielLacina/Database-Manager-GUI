@@ -1,5 +1,7 @@
 use crate::components::business_components::database::{
-    database::create_database_pool, models::Table, schemas::TableIn,
+    database::create_database_pool,
+    models::{Table, TableInfo},
+    schemas::TableIn,
 };
 use sqlx::PgPool;
 
@@ -31,11 +33,27 @@ impl Repository {
         Ok(res)
     }
 
+    pub async fn get_table_info(
+        &self,
+        table_name: String,
+    ) -> Result<Vec<TableInfo>, Box<sqlx::Error>> {
+        let res = sqlx::query_as::<_, TableInfo>(&format!(
+            "SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = '{}'",
+            table_name
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .unwrap();
+        Ok(res)
+    }
+
     pub async fn create_table(&self, table_in: TableIn) {
         let columns_query_list = table_in
             .columns
             .into_iter()
-            .map(|column| format!("{} {}", &column.name, &column.data_type.to_string()))
+            .map(|column| format!("{} {}", &column.name, &column.datatype.to_string()))
             .collect::<Vec<_>>();
         let columns_query_joined = format!("({})", columns_query_list.join(", "));
         sqlx::query(&format!(

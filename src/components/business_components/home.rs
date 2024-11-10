@@ -1,5 +1,6 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BDataType, BTable, BTableIn, BusinessComponent,
+    repository_module::BRepository, BColumn, BDataType, BTable, BTableIn, BTableInfo,
+    BusinessComponent,
 };
 
 #[derive(Debug, Clone)]
@@ -29,6 +30,10 @@ impl Home {
         self.repository.create_table(table_in).await;
         self.tables = Some(self.repository.get_tables().await.unwrap());
     }
+
+    async fn get_table_info(&self, table_name: String) -> Vec<BTableInfo> {
+        self.repository.get_table_info(table_name).await.unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -38,11 +43,7 @@ mod tests {
 
     async fn home_business_component(pool: PgPool) -> Home {
         let repository = BRepository::new(Some(pool)).await;
-        Home {
-            repository,
-            title: None,
-            tables: None,
-        }
+        Home::new(repository)
     }
 
     #[sqlx::test]
@@ -70,11 +71,19 @@ mod tests {
             columns: vec![
                 BColumn {
                     name: String::from("username"),
-                    data_type: BDataType::TEXT,
+                    datatype: BDataType::TEXT,
                 },
                 BColumn {
                     name: String::from("password"),
-                    data_type: BDataType::TEXT,
+                    datatype: BDataType::TEXT,
+                },
+                BColumn {
+                    name: String::from("balance"),
+                    datatype: BDataType::INT,
+                },
+                BColumn {
+                    name: String::from("join_date"),
+                    datatype: BDataType::TIMESTAMP,
                 },
             ],
         })
@@ -84,5 +93,21 @@ mod tests {
         }];
 
         assert_eq!(home.tables, Some(expected_tables));
+    }
+
+    #[sqlx::test]
+    async fn test_get_table_info(pool: PgPool) {
+        sqlx::query!("CREATE TABLE users (name TEXT)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let home = home_business_component(pool).await;
+        let table_info = home.get_table_info(String::from("users")).await;
+        let expected_table_info = vec![BTableInfo {
+            column_name: String::from("name"),
+            data_type: String::from("text"),
+        }];
+
+        assert_eq!(table_info, expected_table_info);
     }
 }
