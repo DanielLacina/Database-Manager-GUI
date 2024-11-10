@@ -1,11 +1,11 @@
 use crate::components::business_components::{
     component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
-    components::BusinessHome,
+    components::BusinessTables,
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    home::events::{HomeMessage, TablesMessage},
+    home::events::TablesMessage,
 };
 use iced::{
     widget::{
@@ -15,18 +15,20 @@ use iced::{
 };
 use regex::Regex;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct TablesUI {
     pub table_filter: String,
     pub show_create_table_form: bool,
     pub create_table_input: BTableIn,
-    pub tables: Option<Vec<BTable>>,
+    pub tables: BusinessTables,
 }
 
 impl UIComponent for TablesUI {
     type EventType = TablesMessage;
 
-    async fn initialize_component(&mut self) {}
+    async fn initialize_component(&mut self) {
+        self.tables.initialize_component().await;
+    }
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
@@ -75,17 +77,28 @@ impl UIComponent for TablesUI {
                 self.tables = tables;
                 Task::none()
             }
+            Self::EventType::SubmitCreateTable(create_table_input) => {
+                let mut tables = self.tables.clone();
+                Task::perform(
+                    async move {
+                        tables.add_table(create_table_input).await;
+                        tables
+                    },
+                    |tables| TablesMessage::message(Self::EventType::TableCreated(tables)),
+                )
+            }
         }
     }
 }
 
 impl TablesUI {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub async fn initialize_tables(&mut self, tables: Option<Vec<BTable>>) {
-        self.tables = tables;
+    pub fn new(tables: BusinessTables) -> Self {
+        Self {
+            table_filter: String::default(),
+            show_create_table_form: false,
+            create_table_input: BTableIn::default(),
+            tables,
+        }
     }
 
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
@@ -146,7 +159,7 @@ impl TablesUI {
 
     /// Creates a container to list all tables
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
-        if let Some(tables) = &self.tables {
+        if let Some(tables) = &self.tables.tables {
             let mut tables_column = Column::new().spacing(10).padding(10);
 
             let table_filter_pattern = self.get_table_filter_regex();
@@ -201,7 +214,7 @@ impl TablesUI {
             .padding(10);
 
         let create_table_button = button("Create table")
-            .on_press(HomeMessage::message(HomeMessage::SubmitCreateTable(
+            .on_press(TablesMessage::message(TablesMessage::SubmitCreateTable(
                 self.create_table_input.clone(),
             )))
             .padding(10);

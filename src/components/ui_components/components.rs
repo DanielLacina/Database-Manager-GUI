@@ -44,7 +44,7 @@ impl UIComponents {
     pub async fn new() -> Self {
         let business_components = BusinessComponents::new().await;
         Self {
-            home_ui: HomeUI::new(business_components.home),
+            home_ui: HomeUI::new(business_components.home, business_components.tables),
         }
     }
 

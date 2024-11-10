@@ -1,6 +1,6 @@
 use crate::components::business_components::{
     component::{BDataType, BTable, BTableIn},
-    components::BusinessHome,
+    components::{BusinessHome, BusinessTables},
 };
 use crate::components::ui_components::home::home::HomeUI;
 use crate::components::ui_components::{component::Event, events::Message};
@@ -10,8 +10,6 @@ pub enum HomeMessage {
     InitializeComponent,
     ComponentInitialized(HomeUI),
     Tables(TablesMessage),
-    HomeTablesUpdated(BusinessHome),
-    SubmitCreateTable(BTableIn),
 }
 
 impl Event for HomeMessage {
@@ -22,6 +20,7 @@ impl Event for HomeMessage {
 
 #[derive(Debug, Clone)]
 pub enum TablesMessage {
+    SubmitCreateTable(BTableIn),
     UpdateTableFilter(String),
     ShowCreateTableForm,
     AddColumn,                          // Event to add a new column to the form
@@ -29,7 +28,7 @@ pub enum TablesMessage {
     UpdateColumnName(usize, String),    // Event to update the name of a specific column
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
-    TableCreated(Option<Vec<BTable>>),
+    TableCreated(BusinessTables),
 }
 
 impl Event for TablesMessage {
