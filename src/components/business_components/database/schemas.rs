@@ -4,7 +4,7 @@ use std::fmt;
 pub enum DataType {
     TEXT,
     INT,
-    DATETIME,
+    TIMESTAMP,
 }
 
 impl Default for DataType {
@@ -18,7 +18,7 @@ impl fmt::Display for DataType {
         match self {
             DataType::TEXT => write!(f, "TEXT"),
             DataType::INT => write!(f, "INT"),
-            DataType::DATETIME => write!(f, "DATETIME"),
+            DataType::TIMESTAMP => write!(f, "TIMESTAMP"),
         }
     }
 }

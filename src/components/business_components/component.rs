@@ -1,7 +1,8 @@
-use crate::components::business_components::database::models::Table;
+use crate::components::business_components::database::models::{Table, TableInfo};
 use crate::components::business_components::database::schemas::{Column, DataType, TableIn};
 
 pub type BTable = Table;
+pub type BTableInfo = TableInfo;
 pub type BColumn = Column;
 pub type BDataType = DataType;
 pub type BTableIn = TableIn;
