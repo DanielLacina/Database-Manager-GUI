@@ -1,6 +1,6 @@
 use crate::components::business_components::database::{
     database::create_database_pool,
-    models::{Table, TableInfo},
+    models::{ColumnsInfo, Table},
     schemas::TableIn,
 };
 use sqlx::PgPool;
@@ -33,11 +33,11 @@ impl Repository {
         Ok(res)
     }
 
-    pub async fn get_table_info(
+    pub async fn get_columns_info(
         &self,
         table_name: String,
-    ) -> Result<Vec<TableInfo>, Box<sqlx::Error>> {
-        let res = sqlx::query_as::<_, TableInfo>(&format!(
+    ) -> Result<Vec<ColumnsInfo>, Box<sqlx::Error>> {
+        let res = sqlx::query_as::<_, ColumnsInfo>(&format!(
             "SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = '{}'",

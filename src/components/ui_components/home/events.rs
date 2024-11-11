@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BDataType, BTable, BTableIn},
+    component::{BDataType, BTable, BTableIn, BTableInfo},
     components::{BusinessHome, BusinessTables},
 };
 use crate::components::ui_components::home::home::HomeUI;
@@ -29,6 +29,9 @@ pub enum TablesMessage {
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
     TableCreated(BusinessTables),
+    GetSingleTableInfo(String),
+    SetSingleTableInfo(BTableInfo),
+    UndisplayTableInfo,
 }
 
 impl Event for TablesMessage {
