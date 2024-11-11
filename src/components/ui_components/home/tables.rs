@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
+    component::{BColumn, BDataType, BTable, BTableIn, BTableInfo, BusinessComponent},
     components::BusinessTables,
 };
 use crate::components::ui_components::{
@@ -21,6 +21,7 @@ pub struct TablesUI {
     pub show_create_table_form: bool,
     pub create_table_input: BTableIn,
     pub tables: BusinessTables,
+    pub single_table_info: Option<BTableInfo>,
 }
 
 impl UIComponent for TablesUI {
@@ -78,6 +79,7 @@ impl UIComponent for TablesUI {
                 Task::none()
             }
             Self::EventType::SubmitCreateTable(create_table_input) => {
+                /* could cause race conditions */
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {
@@ -86,6 +88,26 @@ impl UIComponent for TablesUI {
                     },
                     |tables| TablesMessage::message(Self::EventType::TableCreated(tables)),
                 )
+            }
+            Self::EventType::GetSingleTableInfo(table_name) => {
+                let tables = self.tables.clone();
+                Task::perform(
+                    async move {
+                        let table_info = tables.get_table_info(table_name).await;
+                        table_info
+                    },
+                    |table_info| {
+                        TablesMessage::message(Self::EventType::SetSingleTableInfo(table_info))
+                    },
+                )
+            }
+            Self::EventType::SetSingleTableInfo(table_info) => {
+                self.single_table_info = Some(table_info);
+                Task::none()
+            }
+            Self::EventType::UndisplayTableInfo => {
+                self.single_table_info = None;
+                Task::none()
             }
         }
     }
@@ -98,6 +120,7 @@ impl TablesUI {
             show_create_table_form: false,
             create_table_input: BTableIn::default(),
             tables,
+            single_table_info: None,
         }
     }
 
@@ -110,6 +133,7 @@ impl TablesUI {
 
         row = row.push(self.tables_section());
         row = row.push(self.create_table_section());
+        row = row.push(self.single_table_info());
 
         container(row)
             .height(Length::Fill)
@@ -170,7 +194,11 @@ impl TablesUI {
                 .collect();
 
             for table in tables_filtered {
-                tables_column = tables_column.push(text(&table.table_name));
+                let table_button =
+                    button(text(&table.table_name)).on_press(TablesMessage::message(
+                        TablesMessage::GetSingleTableInfo(table.table_name.to_string()),
+                    ));
+                tables_column = tables_column.push(table_button);
             }
 
             scrollable(container(tables_column).padding(10))
@@ -224,6 +252,7 @@ impl TablesUI {
 
         container(form)
             .padding(10)
+            .width(Length::Fill)
             .style(|_| container::Style {
                 background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))), // Dark Gray border color
                 ..Default::default()
@@ -274,6 +303,48 @@ impl TablesUI {
             .into()
     }
 
+    fn single_table_info<'a>(&'a self) -> Element<'a, Message> {
+        let mut table_info_column = Column::new().spacing(10);
+
+        // Check if there's table info to display
+        if let Some(table_info) = &self.single_table_info {
+            // Add the table name as a header
+            table_info_column = table_info_column.push(
+                container(text(&table_info.table_name).size(35))
+                    .width(Length::Fill)
+                    .style(|_| container::Style {
+                        background: Some(iced::Background::Color([0.2, 0.5, 0.7].into())), // Background color
+                        text_color: Some([1.0, 1.0, 1.0].into()), // Text color (white)
+                        ..Default::default()
+                    }),
+            );
+
+            // Add headers for columns
+            table_info_column = table_info_column.push(
+                Row::new()
+                    .spacing(20)
+                    .push(text("Column Name").size(20).width(Length::Fill))
+                    .push(text("Data Type").size(20).width(Length::Fill)),
+            );
+
+            // Add a horizontal line to separate headers from data
+            table_info_column = table_info_column.push(text("------------------------------"));
+
+            // Add rows of data
+            for column_info in &table_info.columns_info {
+                table_info_column = table_info_column.push(
+                    Row::new()
+                        .spacing(20)
+                        .push(text(&column_info.column_name).width(Length::Fill))
+                        .push(text(&column_info.data_type).width(Length::Fill)),
+                );
+            }
+            let undisplay_button = button(text("undisplay"))
+                .on_press(TablesMessage::message(TablesMessage::UndisplayTableInfo));
+            table_info_column = table_info_column.push(undisplay_button);
+        }
+        container(table_info_column).padding(20).into()
+    }
     /// Creates a regex pattern for filtering tables
     fn get_table_filter_regex(&self) -> Regex {
         Regex::new(&format!(r"(?i){}", &self.table_filter)).unwrap_or_else(|error| {

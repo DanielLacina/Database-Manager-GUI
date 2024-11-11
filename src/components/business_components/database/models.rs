@@ -4,7 +4,7 @@ pub struct Table {
 }
 
 #[derive(sqlx::FromRow, Debug, Clone, PartialEq)]
-pub struct TableInfo {
+pub struct ColumnsInfo {
     pub column_name: String,
     pub data_type: String,
 }

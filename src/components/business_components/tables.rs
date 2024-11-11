@@ -1,5 +1,5 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BDataType, BTable, BTableIn, BTableInfo,
+    repository_module::BRepository, BColumn, BColumnsInfo, BDataType, BTable, BTableIn, BTableInfo,
     BusinessComponent,
 };
 
@@ -7,6 +7,12 @@ use crate::components::business_components::component::{
 pub struct Tables {
     repository: BRepository,
     pub tables: Option<Vec<BTable>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableInfo {
+    pub table_name: String,
+    pub columns_info: Vec<BColumnsInfo>,
 }
 
 impl BusinessComponent for Tables {
@@ -28,8 +34,16 @@ impl Tables {
         self.tables = Some(self.repository.get_tables().await.unwrap());
     }
 
-    async fn get_table_info(&self, table_name: String) -> Vec<BTableInfo> {
-        self.repository.get_table_info(table_name).await.unwrap()
+    pub async fn get_table_info(&self, table_name: String) -> TableInfo {
+        let columns_info = self
+            .repository
+            .get_columns_info(table_name.clone())
+            .await
+            .unwrap();
+        TableInfo {
+            table_name,
+            columns_info,
+        }
     }
 }
 
@@ -44,25 +58,25 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_initialize_tables_component(pool: PgPool) {
+    async fn test_initialize_tables_component_component(pool: PgPool) {
         sqlx::query!("CREATE TABLE users (name TEXT)")
             .execute(&pool)
             .await
             .unwrap();
-        let mut tables = tables_business_component(pool).await;
-        tables.initialize_component().await;
+        let mut tables_component = tables_business_component(pool).await;
+        tables_component.initialize_component().await;
         let expected_tables = vec![BTable {
             table_name: String::from("users"),
         }];
 
-        assert_eq!(tables.tables, Some(expected_tables));
+        assert_eq!(tables_component.tables, Some(expected_tables));
     }
 
     #[sqlx::test]
     async fn test_add_table(pool: PgPool) {
-        let mut tables = tables_business_component(pool).await;
-        tables.initialize_component().await;
-        tables
+        let mut tables_component = tables_business_component(pool).await;
+        tables_component.initialize_component().await;
+        tables_component
             .add_table(BTableIn {
                 table_name: String::from("users"),
                 columns: vec![
@@ -89,7 +103,7 @@ mod tests {
             table_name: String::from("users"),
         }];
 
-        assert_eq!(tables.tables, Some(expected_tables));
+        assert_eq!(tables_component.tables, Some(expected_tables));
     }
 
     #[sqlx::test]
@@ -98,12 +112,16 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        let tables = tables_business_component(pool).await;
-        let table_info = tables.get_table_info(String::from("users")).await;
-        let expected_table_info = vec![BTableInfo {
-            column_name: String::from("name"),
-            data_type: String::from("text"),
-        }];
+        let tables_component = tables_business_component(pool).await;
+        let table_name = String::from("users");
+        let table_info = tables_component.get_table_info(table_name.clone()).await;
+        let expected_table_info = TableInfo {
+            table_name: table_name.clone(),
+            columns_info: vec![BColumnsInfo {
+                column_name: String::from("name"),
+                data_type: String::from("text"),
+            }],
+        };
 
         assert_eq!(table_info, expected_table_info);
     }
