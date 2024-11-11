@@ -6,6 +6,7 @@ use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
     home::events::TablesMessage,
+    home::table_info::TableInfoUI,
 };
 use iced::{
     widget::{
@@ -21,7 +22,7 @@ pub struct TablesUI {
     pub show_create_table_form: bool,
     pub create_table_input: BTableIn,
     pub tables: BusinessTables,
-    pub single_table_info: Option<BTableInfo>,
+    pub single_table_info: Option<TableInfoUI>,
 }
 
 impl UIComponent for TablesUI {
@@ -72,21 +73,26 @@ impl UIComponent for TablesUI {
                 self.create_table_input.table_name = input;
                 Task::none()
             }
-            Self::EventType::TableCreated(tables) => {
+            Self::EventType::TableCreated(tables, table_name) => {
                 self.show_create_table_form = false;
                 self.create_table_input = BTableIn::default();
                 self.tables = tables;
-                Task::none()
+                Task::done(Self::EventType::message(
+                    Self::EventType::GetSingleTableInfo(table_name),
+                ))
             }
             Self::EventType::SubmitCreateTable(create_table_input) => {
                 /* could cause race conditions */
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        tables.add_table(create_table_input).await;
-                        tables
+                        tables.add_table(create_table_input.clone()).await;
+                        (tables, create_table_input.table_name)
                     },
-                    |tables| TablesMessage::message(Self::EventType::TableCreated(tables)),
+                    |table_tuple| {
+                        let (tables, table_name) = table_tuple;
+                        Self::EventType::message(Self::EventType::TableCreated(tables, table_name))
+                    },
                 )
             }
             Self::EventType::GetSingleTableInfo(table_name) => {
@@ -97,17 +103,24 @@ impl UIComponent for TablesUI {
                         table_info
                     },
                     |table_info| {
-                        TablesMessage::message(Self::EventType::SetSingleTableInfo(table_info))
+                        Self::EventType::message(Self::EventType::SetSingleTableInfo(table_info))
                     },
                 )
             }
             Self::EventType::SetSingleTableInfo(table_info) => {
-                self.single_table_info = Some(table_info);
+                self.single_table_info = Some(TableInfoUI::new(table_info));
                 Task::none()
             }
             Self::EventType::UndisplayTableInfo => {
                 self.single_table_info = None;
                 Task::none()
+            }
+            Self::EventType::TableInfo => {
+                if let Some(table_info) = self.single_table_info {
+                    self.single_table_info.update()
+                } else {
+                    Task::none()
+                }
             }
         }
     }
@@ -133,7 +146,6 @@ impl TablesUI {
 
         row = row.push(self.tables_section());
         row = row.push(self.create_table_section());
-        row = row.push(self.single_table_info());
 
         container(row)
             .height(Length::Fill)
@@ -154,7 +166,9 @@ impl TablesUI {
         } else {
             "Show create table form"
         })
-        .on_press(TablesMessage::message(TablesMessage::ShowCreateTableForm));
+        .on_press(<TablesUI as UIComponent>::EventType::message(
+            <TablesUI as UIComponent>::EventType::ShowCreateTableForm,
+        ));
 
         tables_display = tables_display.push(show_create_table_form_button);
 
@@ -175,7 +189,11 @@ impl TablesUI {
     /// Creates the search filter input for filtering tables
     fn table_filter_input<'a>(&'a self) -> Element<'a, Message> {
         text_input("Search Tables", &self.table_filter)
-            .on_input(|input| TablesMessage::message(TablesMessage::UpdateTableFilter(input)))
+            .on_input(|input| {
+                <TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::UpdateTableFilter(input),
+                )
+            })
             .width(300)
             .padding(10)
             .into()
@@ -194,10 +212,13 @@ impl TablesUI {
                 .collect();
 
             for table in tables_filtered {
-                let table_button =
-                    button(text(&table.table_name)).on_press(TablesMessage::message(
-                        TablesMessage::GetSingleTableInfo(table.table_name.to_string()),
-                    ));
+                let table_button = button(text(&table.table_name)).on_press(
+                    <TablesUI as UIComponent>::EventType::message(
+                        <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
+                            table.table_name.to_string(),
+                        ),
+                    ),
+                );
                 tables_column = tables_column.push(table_button);
             }
 
@@ -238,13 +259,17 @@ impl TablesUI {
         form = form.push(self.table_form_columns());
 
         let add_column_button = button("Add Column")
-            .on_press(TablesMessage::message(TablesMessage::AddColumn))
+            .on_press(<TablesUI as UIComponent>::EventType::message(
+                <TablesUI as UIComponent>::EventType::AddColumn,
+            ))
             .padding(10);
 
         let create_table_button = button("Create table")
-            .on_press(TablesMessage::message(TablesMessage::SubmitCreateTable(
-                self.create_table_input.clone(),
-            )))
+            .on_press(<TablesUI as UIComponent>::EventType::message(
+                <TablesUI as UIComponent>::EventType::SubmitCreateTable(
+                    self.create_table_input.clone(),
+                ),
+            ))
             .padding(10);
 
         form = form.push(add_column_button);
@@ -271,7 +296,11 @@ impl TablesUI {
     /// Creates the input field for the table name
     fn table_name_input<'a>(&'a self) -> Element<'a, Message> {
         text_input("Table Name", &self.create_table_input.table_name)
-            .on_input(|value| TablesMessage::message(TablesMessage::UpdateTableName(value)))
+            .on_input(|value| {
+                <TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::UpdateTableName(value),
+                )
+            })
             .width(350)
             .padding(10)
             .into()
@@ -281,20 +310,28 @@ impl TablesUI {
     fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
         let name_input = text_input("Column Name", &column.name)
             .on_input(move |value| {
-                TablesMessage::message(TablesMessage::UpdateColumnName(index, value))
+                <TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::UpdateColumnName(index, value),
+                )
             })
             .width(200);
 
         let datatype_input = PickList::new(
             vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
             Some(&column.datatype),
-            move |value| TablesMessage::message(TablesMessage::UpdateColumnType(index, value)),
+            move |value| {
+                <TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::UpdateColumnType(index, value),
+                )
+            },
         )
         .placeholder("Data Type")
         .width(150);
 
         let remove_button = button("Remove")
-            .on_press(TablesMessage::message(TablesMessage::RemoveColumn(index)))
+            .on_press(<TablesUI as UIComponent>::EventType::message(
+                <TablesUI as UIComponent>::EventType::RemoveColumn(index),
+            ))
             .padding(5);
 
         row![name_input, datatype_input, remove_button]
@@ -303,49 +340,6 @@ impl TablesUI {
             .into()
     }
 
-    fn single_table_info<'a>(&'a self) -> Element<'a, Message> {
-        let mut table_info_column = Column::new().spacing(10);
-
-        // Check if there's table info to display
-        if let Some(table_info) = &self.single_table_info {
-            // Add the table name as a header
-            table_info_column = table_info_column.push(
-                container(text(&table_info.table_name).size(35))
-                    .width(Length::Fill)
-                    .style(|_| container::Style {
-                        background: Some(iced::Background::Color([0.2, 0.5, 0.7].into())), // Background color
-                        text_color: Some([1.0, 1.0, 1.0].into()), // Text color (white)
-                        ..Default::default()
-                    }),
-            );
-
-            // Add headers for columns
-            table_info_column = table_info_column.push(
-                Row::new()
-                    .spacing(20)
-                    .push(text("Column Name").size(20).width(Length::Fill))
-                    .push(text("Data Type").size(20).width(Length::Fill)),
-            );
-
-            // Add a horizontal line to separate headers from data
-            table_info_column = table_info_column.push(text("------------------------------"));
-
-            // Add rows of data
-            for column_info in &table_info.columns_info {
-                table_info_column = table_info_column.push(
-                    Row::new()
-                        .spacing(20)
-                        .push(text(&column_info.column_name).width(Length::Fill))
-                        .push(text(&column_info.data_type).width(Length::Fill)),
-                );
-            }
-            let undisplay_button = button(text("undisplay"))
-                .on_press(TablesMessage::message(TablesMessage::UndisplayTableInfo));
-            table_info_column = table_info_column.push(undisplay_button);
-        }
-        container(table_info_column).padding(20).into()
-    }
-    /// Creates a regex pattern for filtering tables
     fn get_table_filter_regex(&self) -> Regex {
         Regex::new(&format!(r"(?i){}", &self.table_filter)).unwrap_or_else(|error| {
             eprintln!("{}", error);

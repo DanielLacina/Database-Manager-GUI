@@ -23,6 +23,17 @@ impl fmt::Display for DataType {
     }
 }
 
+impl DataType {
+    pub fn to_datatype(value: String) -> Self {
+        match value.as_str() {
+            "text" => Self::TEXT,
+            "int" => Self::INT,
+            "timestamp without time zone" => Self::TIMESTAMP,
+            _ => panic!("Invalid datatype"),
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct Column {
     pub name: String,

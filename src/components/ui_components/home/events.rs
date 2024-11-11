@@ -28,14 +28,31 @@ pub enum TablesMessage {
     UpdateColumnName(usize, String),    // Event to update the name of a specific column
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
-    TableCreated(BusinessTables),
+    TableCreated(BusinessTables, String),
     GetSingleTableInfo(String),
     SetSingleTableInfo(BTableInfo),
     UndisplayTableInfo,
+    SingleTableInfo(TableInfoMessage),
+    TableInfo(TableInfoMessage),
 }
 
 impl Event for TablesMessage {
     fn message(event: Self) -> Message {
         HomeMessage::message(HomeMessage::Tables(event))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TableInfoMessage {
+    AddColumn,                          // Event to add a new column to the form
+    RemoveColumn(usize),                // Event to remove a specific column by index
+    UpdateColumnName(usize, String),    // Event to update the name of a specific column
+    UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
+    UpdateTableName(String),
+}
+
+impl Event for TableInfoMessage {
+    fn message(event: Self) -> Message {
+        TablesMessage::message(TablesMessage::TableInfo(event))
     }
 }
