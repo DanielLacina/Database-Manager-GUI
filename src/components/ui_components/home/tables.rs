@@ -144,15 +144,13 @@ impl TablesUI {
             .spacing(20)
             .padding(20);
 
+        // Add sections to the main row
         row = row.push(self.tables_section());
         row = row.push(self.create_table_section());
+
+        // Show single table information if available
         if let Some(table_info) = &self.single_table_info {
-            let undisplay_button =
-                button(text("undisplay")).on_press(<TablesUI as UIComponent>::EventType::message(
-                    <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
-                ));
-            let table_info_column = column![table_info.content(), undisplay_button];
-            row = row.push(table_info_column);
+            row = row.push(self.single_table_info_section(table_info));
         }
 
         container(row)
@@ -160,6 +158,10 @@ impl TablesUI {
             .width(Length::Fill)
             .into()
     }
+
+    // ========================
+    // SECTION: Tables Display
+    // ========================
 
     /// Renders the section for displaying tables and filtering
     fn tables_section<'a>(&'a self) -> Element<'a, Message> {
@@ -169,7 +171,8 @@ impl TablesUI {
         tables_display = tables_display.push(self.table_filter_input());
         tables_display = tables_display.push(self.tables_container());
 
-        let show_create_table_form_button = button(if self.show_create_table_form {
+        // Button to show or hide the "Create Table" form
+        let toggle_form_button = button(if self.show_create_table_form {
             "Remove create table form"
         } else {
             "Show create table form"
@@ -178,14 +181,14 @@ impl TablesUI {
             <TablesUI as UIComponent>::EventType::ShowCreateTableForm,
         ));
 
-        tables_display = tables_display.push(show_create_table_form_button);
+        tables_display = tables_display.push(toggle_form_button);
 
         // Wrap in a scrollable container
         scrollable(
             container(tables_display)
                 .padding(10)
                 .style(|_| container::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))), // Dark Gray border color
+                    background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))),
                     ..Default::default()
                 }),
         )
@@ -211,7 +214,6 @@ impl TablesUI {
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
         if let Some(tables) = &self.tables.tables {
             let mut tables_column = Column::new().spacing(10).padding(10);
-
             let table_filter_pattern = self.get_table_filter_regex();
 
             let tables_filtered: Vec<_> = tables
@@ -243,6 +245,10 @@ impl TablesUI {
         }
     }
 
+    // ============================
+    // SECTION: Create Table Form
+    // ============================
+
     /// Creates the form section for creating a new table
     fn create_table_section<'a>(&'a self) -> Element<'a, Message> {
         let mut create_form = Column::new().spacing(10).padding(10);
@@ -256,14 +262,9 @@ impl TablesUI {
 
     /// Creates the form to create a new table
     fn create_table_form<'a>(&'a self) -> Element<'a, Message> {
-        let mut form = Column::new()
-            .height(Length::Fill)
-            .width(Length::Fill)
-            .padding(10)
-            .spacing(10);
+        let mut form = Column::new().spacing(10).padding(10);
 
         form = form.push(self.table_name_input());
-
         form = form.push(self.table_form_columns());
 
         let add_column_button = button("Add Column")
@@ -285,20 +286,11 @@ impl TablesUI {
 
         container(form)
             .padding(10)
-            .width(Length::Fill)
             .style(|_| container::Style {
-                background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))), // Dark Gray border color
+                background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))),
                 ..Default::default()
             })
             .into()
-    }
-
-    fn table_form_columns<'a>(&'a self) -> Element<'a, Message> {
-        let mut table_columns = Column::new();
-        for (index, column) in self.create_table_input.columns.iter().enumerate() {
-            table_columns = table_columns.push(self.column_input_row(index, column));
-        }
-        scrollable(table_columns).height(500).into()
     }
 
     /// Creates the input field for the table name
@@ -314,7 +306,17 @@ impl TablesUI {
             .into()
     }
 
-    /// Creates a row of inputs for a column (name, data type, and remove button)
+    fn table_form_columns<'a>(&'a self) -> Element<'a, Message> {
+        let mut columns = Column::new();
+
+        for (index, column) in self.create_table_input.columns.iter().enumerate() {
+            columns = columns.push(self.column_input_row(index, column));
+        }
+
+        scrollable(columns).height(500).into()
+    }
+
+    /// Creates a row of inputs for a column
     fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
         let name_input = text_input("Column Name", &column.name)
             .on_input(move |value| {
@@ -348,10 +350,25 @@ impl TablesUI {
             .into()
     }
 
+    // ============================
+    // SECTION: Utility Functions
+    // ============================
+
     fn get_table_filter_regex(&self) -> Regex {
-        Regex::new(&format!(r"(?i){}", &self.table_filter)).unwrap_or_else(|error| {
-            eprintln!("{}", error);
-            Regex::new(r"").unwrap()
-        })
+        Regex::new(&format!(r"(?i){}", &self.table_filter))
+            .unwrap_or_else(|_| Regex::new(r"").unwrap())
+    }
+
+    /// Displays information for a single table
+    fn single_table_info_section<'a>(
+        &'a self,
+        table_info: &'a TableInfoUI,
+    ) -> Element<'a, Message> {
+        let undisplay_button =
+            button("Undisplay").on_press(<TablesUI as UIComponent>::EventType::message(
+                <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
+            ));
+
+        column![table_info.content(), undisplay_button].into()
     }
 }

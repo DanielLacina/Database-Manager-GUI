@@ -3,7 +3,7 @@ use crate::components::business_components::database::{
     models::{ColumnsInfo, Table},
     schemas::{TableChangeEvents, TableIn},
 };
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool};
 
 #[derive(Debug, Clone)]
 pub struct Repository {
@@ -70,58 +70,47 @@ WHERE table_name = '{}'",
         table_name: &str,
         table_change_events: &Vec<TableChangeEvents>,
     ) -> Result<(), sqlx::Error> {
-        let mut changes = Vec::new();
-        let mut new_table_name = None;
+        // Step 1: Begin a transaction
+        let mut transaction = self.pool.begin().await?;
+        let mut current_table_name = table_name.to_string();
 
+        // Step 2: Collect changes and detect table rename
         for event in table_change_events {
-            match event {
+            let query = match event {
+                // Handle table renaming
                 TableChangeEvents::ChangeTableName(new_name) => {
-                    new_table_name = Some(new_name);
-                }
-                TableChangeEvents::ChangeColumnDataType(column_name, new_data_type) => {
-                    let change = format!(
-                        "ALTER COLUMN \"{}\" TYPE {}",
-                        column_name,
-                        new_data_type.to_string()
+                    let query = format!(
+                        "ALTER TABLE \"{}\" RENAME TO \"{}\"",
+                        current_table_name, new_name
                     );
-                    changes.push(change);
+                    current_table_name = new_name.clone(); // Update current table name
+                    query
                 }
+
+                // Handle changing a column's data type
+                TableChangeEvents::ChangeColumnDataType(column_name, new_data_type) => {
+                    format!(
+                        "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {} USING \"{}\"::{}",
+                        current_table_name, column_name, new_data_type, column_name, new_data_type
+                    )
+                }
+
+                // Handle renaming a column
                 TableChangeEvents::ChangeColumnName(old_name, new_name) => {
-                    let change = format!("RENAME COLUMN \"{}\" TO \"{}\"", old_name, new_name);
-                    changes.push(change);
+                    format!(
+                        "ALTER TABLE \"{}\" RENAME COLUMN \"{}\" TO \"{}\"",
+                        current_table_name, old_name, new_name
+                    )
                 }
-            }
+            };
+
+            // Execute each query within the transaction
+            println!("Executing query: {}", query);
+            sqlx::query(&query).execute(&mut transaction).await?;
         }
-        let input_table_name;
-        // If there's a table rename, we need to handle that separately
-        let table_rename_query;
-        if let Some(new_name) = new_table_name {
-            table_rename_query =
-                format!("ALTER TABLE \"{}\" RENAME TO \"{}\";", table_name, new_name);
-            input_table_name = new_name;
-        } else {
-            table_rename_query = String::new();
-            input_table_name = &table_name.to_string();
-        };
 
-        // Combine all the changes into one query
-        let alter_table_query = if !changes.is_empty() {
-            format!(
-                "ALTER TABLE \"{}\" {};",
-                input_table_name,
-                changes.join(", ")
-            )
-        } else {
-            String::new()
-        };
-
-        // Combine the table rename and column alterations into a single query
-        let full_query = format!("{} {}", table_rename_query, alter_table_query);
-
-        // Execute the query if it's not empty
-        if !full_query.trim().is_empty() {
-            sqlx::query(&full_query).execute(&self.pool).await?;
-        }
+        // Step 3: Commit the transaction if all queries succeed
+        transaction.commit().await?;
 
         Ok(())
     }

@@ -54,9 +54,11 @@ impl Tables {
         table_name: String,
         table_change_events: Vec<BTableChangeEvents>,
     ) -> TableInfo {
-        self.repository
+        let res = self
+            .repository
             .alter_table(&table_name, &table_change_events)
             .await;
+        eprintln!("{:?}", res);
         let mut input_table_name = table_name;
         for event in table_change_events {
             match event {
@@ -161,7 +163,7 @@ mod tests {
         let new_column_datatype = BDataType::INT;
         let table_change_events = vec![
             BTableChangeEvents::ChangeTableName(new_table_name.clone()),
-            BTableChangeEvents::ChangeColumnName(String::from("users"), new_column_name.clone()),
+            BTableChangeEvents::ChangeColumnName(String::from("name"), new_column_name.clone()),
             BTableChangeEvents::ChangeColumnDataType(
                 new_column_name.clone(),
                 new_column_datatype.clone(),
