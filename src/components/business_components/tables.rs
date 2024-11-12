@@ -10,24 +10,9 @@ pub struct Tables {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ColumnsInfoWithEnumDataType {
-    pub column_name: String,
-    pub data_type: BDataType,
-}
-
-impl ColumnsInfoWithEnumDataType {
-    fn new(column: BColumnsInfo) -> Self {
-        Self {
-            column_name: column.column_name,
-            data_type: BDataType::to_datatype(column.data_type),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct TableInfo {
     pub table_name: String,
-    pub columns_info: Vec<ColumnsInfoWithEnumDataType>,
+    pub columns_info: Vec<BColumn>,
 }
 
 impl BusinessComponent for Tables {
@@ -57,7 +42,10 @@ impl Tables {
             .unwrap();
         let columns_info_with_enum_datatype = columns_info
             .into_iter()
-            .map(|column| ColumnsInfoWithEnumDataType::new(column))
+            .map(|column| BColumn {
+                name: column.column_name,
+                datatype: BDataType::to_datatype(column.data_type),
+            })
             .collect();
         TableInfo {
             table_name,
@@ -136,9 +124,9 @@ mod tests {
         let table_info = tables_component.get_table_info(table_name.clone()).await;
         let expected_table_info = TableInfo {
             table_name: table_name.clone(),
-            columns_info: vec![ColumnsInfoWithEnumDataType {
-                column_name: String::from("name"),
-                data_type: BDataType::TEXT,
+            columns_info: vec![BColumn {
+                name: String::from("name"),
+                datatype: BDataType::TEXT,
             }],
         };
 

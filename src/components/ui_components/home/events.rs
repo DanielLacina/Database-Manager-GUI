@@ -33,7 +33,6 @@ pub enum TablesMessage {
     SetSingleTableInfo(BTableInfo),
     UndisplayTableInfo,
     SingleTableInfo(TableInfoMessage),
-    TableInfo(TableInfoMessage),
 }
 
 impl Event for TablesMessage {
@@ -53,6 +52,6 @@ pub enum TableInfoMessage {
 
 impl Event for TableInfoMessage {
     fn message(event: Self) -> Message {
-        TablesMessage::message(TablesMessage::TableInfo(event))
+        TablesMessage::message(TablesMessage::SingleTableInfo(event))
     }
 }

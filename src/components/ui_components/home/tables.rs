@@ -115,9 +115,9 @@ impl UIComponent for TablesUI {
                 self.single_table_info = None;
                 Task::none()
             }
-            Self::EventType::TableInfo => {
-                if let Some(table_info) = self.single_table_info {
-                    self.single_table_info.update()
+            Self::EventType::SingleTableInfo(table_info_message) => {
+                if let Some(table_info) = &mut self.single_table_info {
+                    table_info.update(table_info_message)
                 } else {
                     Task::none()
                 }
@@ -146,6 +146,14 @@ impl TablesUI {
 
         row = row.push(self.tables_section());
         row = row.push(self.create_table_section());
+        if let Some(table_info) = &self.single_table_info {
+            let undisplay_button =
+                button(text("undisplay")).on_press(<TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
+                ));
+            let table_info_column = column![table_info.content(), undisplay_button];
+            row = row.push(table_info_column);
+        }
 
         container(row)
             .height(Length::Fill)
