@@ -45,3 +45,9 @@ pub struct TableIn {
     pub table_name: String,
     pub columns: Vec<Column>,
 }
+
+pub enum TableChangeEvents {
+    ChangeTableName(String),
+    ChangeColumnDataType(String, DataType),
+    ChangeColumnName(String, String),
+}
