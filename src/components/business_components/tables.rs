@@ -12,7 +12,7 @@ pub struct Tables {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TableInfo {
     pub table_name: String,
-    pub columns_info: Vec<BColumnsInfo>,
+    pub columns_info: Vec<BColumn>,
 }
 
 impl BusinessComponent for Tables {
@@ -40,9 +40,16 @@ impl Tables {
             .get_columns_info(table_name.clone())
             .await
             .unwrap();
+        let columns_info_with_enum_datatype = columns_info
+            .into_iter()
+            .map(|column| BColumn {
+                name: column.column_name,
+                datatype: BDataType::to_datatype(column.data_type),
+            })
+            .collect();
         TableInfo {
             table_name,
-            columns_info,
+            columns_info: columns_info_with_enum_datatype,
         }
     }
 }
@@ -117,9 +124,9 @@ mod tests {
         let table_info = tables_component.get_table_info(table_name.clone()).await;
         let expected_table_info = TableInfo {
             table_name: table_name.clone(),
-            columns_info: vec![BColumnsInfo {
-                column_name: String::from("name"),
-                data_type: String::from("text"),
+            columns_info: vec![BColumn {
+                name: String::from("name"),
+                datatype: BDataType::TEXT,
             }],
         };
 

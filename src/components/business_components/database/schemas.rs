@@ -23,13 +23,24 @@ impl fmt::Display for DataType {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+impl DataType {
+    pub fn to_datatype(value: String) -> Self {
+        match value.as_str() {
+            "text" => Self::TEXT,
+            "integer" => Self::INT,
+            "timestamp without time zone" => Self::TIMESTAMP,
+            _ => panic!("Invalid datatype"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Column {
     pub name: String,
     pub datatype: DataType,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct TableIn {
     pub table_name: String,
     pub columns: Vec<Column>,
