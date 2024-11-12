@@ -3,7 +3,7 @@ use crate::components::business_components::database::{
     models::{ColumnsInfo, Table},
     schemas::{TableChangeEvents, TableIn},
 };
-use sqlx::{Executor, PgPool};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 
 #[derive(Debug, Clone)]
 pub struct Repository {
@@ -70,32 +70,27 @@ WHERE table_name = '{}'",
         table_name: &str,
         table_change_events: &Vec<TableChangeEvents>,
     ) -> Result<(), sqlx::Error> {
-        // Step 1: Begin a transaction
-        let mut transaction = self.pool.begin().await?;
+        // Begin a transaction
+        let mut transaction: Transaction<'_, Postgres> = self.pool.begin().await?;
         let mut current_table_name = table_name.to_string();
 
-        // Step 2: Collect changes and detect table rename
+        // Collect changes and detect table rename
         for event in table_change_events {
             let query = match event {
-                // Handle table renaming
                 TableChangeEvents::ChangeTableName(new_name) => {
                     let query = format!(
                         "ALTER TABLE \"{}\" RENAME TO \"{}\"",
                         current_table_name, new_name
                     );
-                    current_table_name = new_name.clone(); // Update current table name
+                    current_table_name = new_name.clone();
                     query
                 }
-
-                // Handle changing a column's data type
                 TableChangeEvents::ChangeColumnDataType(column_name, new_data_type) => {
                     format!(
                         "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {} USING \"{}\"::{}",
                         current_table_name, column_name, new_data_type, column_name, new_data_type
                     )
                 }
-
-                // Handle renaming a column
                 TableChangeEvents::ChangeColumnName(old_name, new_name) => {
                     format!(
                         "ALTER TABLE \"{}\" RENAME COLUMN \"{}\" TO \"{}\"",
@@ -104,12 +99,12 @@ WHERE table_name = '{}'",
                 }
             };
 
-            // Execute each query within the transaction
+            // Execute the query within the transaction
             println!("Executing query: {}", query);
-            sqlx::query(&query).execute(&mut transaction).await?;
+            sqlx::query(&query).execute(&mut *transaction).await?;
         }
 
-        // Step 3: Commit the transaction if all queries succeed
+        // Commit the transaction if all queries succeed
         transaction.commit().await?;
 
         Ok(())
