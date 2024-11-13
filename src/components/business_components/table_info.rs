@@ -7,7 +7,7 @@ use crate::components::business_components::component::{
 pub struct TableInfo {
     repository: BRepository,
     pub table_name: String,
-    pub columns_info: Option<Vec<BColumn>>,
+    pub columns_info: Vec<BColumn>,
     table_change_events: Vec<BTableChangeEvents>,
 }
 
@@ -22,7 +22,7 @@ impl TableInfo {
         Self {
             repository,
             table_name,
-            columns_info: None,
+            columns_info: vec![],
             table_change_events: vec![],
         }
     }
@@ -37,7 +37,7 @@ impl TableInfo {
             })
             .collect();
         self.table_name = table_name.to_string();
-        self.columns_info = Some(columns_info_with_enum_datatype);
+        self.columns_info = columns_info_with_enum_datatype;
     }
 
     pub fn add_table_change_event(&mut self, mut table_change_event: BTableChangeEvents) {
@@ -158,10 +158,10 @@ mod tests {
         assert_eq!(table_info.table_name, table_in.table_name);
         assert_eq!(
             table_info.columns_info,
-            Some(vec![BColumn {
+            vec![BColumn {
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
-            }])
+            }]
         );
     }
 
@@ -189,7 +189,7 @@ mod tests {
 
         // Assertions
         assert_eq!(table_info.table_name, "accounts");
-        assert!(table_info.columns_info.is_some());
+        assert!(table_info.columns_info.len() > 0);
     }
 
     #[sqlx::test]
@@ -216,10 +216,10 @@ mod tests {
         table_info.alter_table().await;
 
         // Assertions
-        let expected_columns = Some(vec![BColumn {
+        let expected_columns = vec![BColumn {
             name: String::from("username"),
             datatype: BDataType::TEXT,
-        }]);
+        }];
         assert_eq!(table_info.columns_info, expected_columns);
     }
 
@@ -247,10 +247,10 @@ mod tests {
         table_info.alter_table().await;
 
         // Assertions
-        let expected_columns = Some(vec![BColumn {
+        let expected_columns = vec![BColumn {
             name: String::from("age"),
             datatype: BDataType::INT,
-        }]);
+        }];
         assert_eq!(table_info.columns_info, expected_columns);
     }
     #[cfg(test)]
@@ -286,10 +286,10 @@ mod tests {
             assert_eq!(table_info.table_name, table_in.table_name);
             assert_eq!(
                 table_info.columns_info,
-                Some(vec![BColumn {
+                vec![BColumn {
                     name: String::from("name"),
                     datatype: BDataType::TEXT,
-                }])
+                }]
             );
         }
 
@@ -315,7 +315,7 @@ mod tests {
 
             // Assertions
             assert_eq!(table_info.table_name, "accounts");
-            assert!(table_info.columns_info.is_some());
+            assert!(table_info.columns_info.len() > 0);
         }
 
         #[sqlx::test]
@@ -340,10 +340,10 @@ mod tests {
             table_info.alter_table().await;
 
             // Assertions
-            let expected_columns = Some(vec![BColumn {
+            let expected_columns = vec![BColumn {
                 name: String::from("username"),
                 datatype: BDataType::TEXT,
-            }]);
+            }];
             assert_eq!(table_info.columns_info, expected_columns);
         }
 
@@ -369,10 +369,10 @@ mod tests {
             table_info.alter_table().await;
 
             // Assertions
-            let expected_columns = Some(vec![BColumn {
+            let expected_columns = vec![BColumn {
                 name: String::from("age"),
                 datatype: BDataType::INT,
-            }]);
+            }];
             assert_eq!(table_info.columns_info, expected_columns);
         }
 
@@ -412,7 +412,7 @@ mod tests {
 
             // Assertions
             assert_eq!(table_info.table_name, "accounts");
-            let expected_columns = Some(vec![
+            let expected_columns = vec![
                 BColumn {
                     name: String::from("username"),
                     datatype: BDataType::TEXT,
@@ -421,7 +421,7 @@ mod tests {
                     name: String::from("age"),
                     datatype: BDataType::INT,
                 },
-            ]);
+            ];
             assert_eq!(table_info.columns_info, expected_columns);
         }
     }

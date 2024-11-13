@@ -6,7 +6,7 @@ use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
     home::events::TablesMessage,
-    home::table_info::TableInfoUI,
+    home::table_info::BTableInfoUI,
 };
 use iced::{
     widget::{
@@ -22,7 +22,7 @@ pub struct TablesUI {
     pub show_create_table_form: bool,
     pub create_table_input: BTableIn,
     pub tables: BusinessTables,
-    pub single_table_info: Option<TableInfoUI>,
+    pub single_table_info: Option<BTableInfoUI>,
 }
 
 impl UIComponent for TablesUI {
@@ -78,7 +78,7 @@ impl UIComponent for TablesUI {
                 self.create_table_input = BTableIn::default();
                 self.tables = tables;
                 Task::done(Self::EventType::message(
-                    Self::EventType::GetSingleTableInfo(table_name),
+                    Self::EventType::GetSingleBTableInfo(table_name),
                 ))
             }
             Self::EventType::SubmitCreateTable(create_table_input) => {
@@ -95,27 +95,28 @@ impl UIComponent for TablesUI {
                     },
                 )
             }
-            Self::EventType::GetSingleTableInfo(table_name) => {
-                let tables = self.tables.clone();
+            Self::EventType::GetSingleBTableInfo(table_name) => {
+                let mut tables = self.tables.clone();
+
                 Task::perform(
                     async move {
-                        let table_info = tables.initialize_component().await;
-                        table_info
+                        tables.set_table_info(table_name).await;
+                        tables.table_info.unwrap()
                     },
                     |table_info| {
-                        Self::EventType::message(Self::EventType::SetSingleTableInfo(table_info))
+                        Self::EventType::message(Self::EventType::SetSingleBTableInfo(table_info))
                     },
                 )
             }
-            Self::EventType::SetSingleTableInfo(table_info) => {
-                self.single_table_info = Some(TableInfoUI::new(table_info));
+            Self::EventType::SetSingleBTableInfo(table_info) => {
+                self.single_table_info = Some(BTableInfoUI::new(table_info));
                 Task::none()
             }
-            Self::EventType::UndisplayTableInfo => {
+            Self::EventType::UndisplayBTableInfo => {
                 self.single_table_info = None;
                 Task::none()
             }
-            Self::EventType::SingleTableInfo(table_info_message) => {
+            Self::EventType::SingleBTableInfo(table_info_message) => {
                 if let Some(table_info) = &mut self.single_table_info {
                     table_info.update(table_info_message)
                 } else {
@@ -224,7 +225,7 @@ impl TablesUI {
             for table in tables_filtered {
                 let table_button = button(text(&table.table_name)).on_press(
                     <TablesUI as UIComponent>::EventType::message(
-                        <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
+                        <TablesUI as UIComponent>::EventType::GetSingleBTableInfo(
                             table.table_name.to_string(),
                         ),
                     ),
@@ -362,11 +363,11 @@ impl TablesUI {
     /// Displays information for a single table
     fn single_table_info_section<'a>(
         &'a self,
-        table_info: &'a TableInfoUI,
+        table_info: &'a BTableInfoUI,
     ) -> Element<'a, Message> {
         let undisplay_button =
             button("Undisplay").on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
+                <TablesUI as UIComponent>::EventType::UndisplayBTableInfo,
             ));
 
         column![table_info.content(), undisplay_button].into()

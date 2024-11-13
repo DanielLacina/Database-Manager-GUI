@@ -5,7 +5,7 @@ use crate::components::business_components::{
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    home::events::TableInfoMessage,
+    home::events::BTableInfoMessage,
 };
 use iced::{
     border,
@@ -18,14 +18,14 @@ use iced::{
 };
 
 #[derive(Debug, Clone)]
-pub struct TableInfoUI {
+pub struct BTableInfoUI {
     table_info: BTableInfo,
     table_name_display: String,
     columns_display: Vec<BColumn>,
 }
 
-impl UIComponent for TableInfoUI {
-    type EventType = TableInfoMessage;
+impl UIComponent for BTableInfoUI {
+    type EventType = BTableInfoMessage;
 
     async fn initialize_component(&mut self) {}
 
@@ -61,9 +61,10 @@ impl UIComponent for TableInfoUI {
     }
 }
 
-impl TableInfoUI {
+impl BTableInfoUI {
     pub fn new(table_info: BTableInfo) -> Self {
         Self {
+            table_info: table_info.clone(),
             table_name_display: table_info.table_name,
             columns_display: table_info.columns_info,
         }
@@ -90,8 +91,8 @@ impl TableInfoUI {
 
         // Add "Add Column" button
         let add_column_button = button("Add Column")
-            .on_press(<TableInfoUI as UIComponent>::EventType::message(
-                <TableInfoUI as UIComponent>::EventType::AddColumn,
+            .on_press(<BTableInfoUI as UIComponent>::EventType::message(
+                <BTableInfoUI as UIComponent>::EventType::AddColumn,
             ))
             .padding(10);
         table_info_column = table_info_column.push(add_column_button);
@@ -104,8 +105,8 @@ impl TableInfoUI {
     fn build_table_name_input(&self) -> TextInput<'_, Message> {
         text_input("Table Name", &self.table_name_display)
             .on_input(|value| {
-                <TableInfoUI as UIComponent>::EventType::message(
-                    <TableInfoUI as UIComponent>::EventType::UpdateTableName(value),
+                <BTableInfoUI as UIComponent>::EventType::message(
+                    <BTableInfoUI as UIComponent>::EventType::UpdateTableName(value),
                 )
             })
             .size(30)
@@ -140,8 +141,8 @@ impl TableInfoUI {
             // Input for column name
             let name_input = text_input("Column Name", &column_info.name)
                 .on_input(move |value| {
-                    <TableInfoUI as UIComponent>::EventType::message(
-                        <TableInfoUI as UIComponent>::EventType::UpdateColumnName(index, value),
+                    <BTableInfoUI as UIComponent>::EventType::message(
+                        <BTableInfoUI as UIComponent>::EventType::UpdateColumnName(index, value),
                     )
                 })
                 .width(200);
@@ -151,8 +152,8 @@ impl TableInfoUI {
                 vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
                 Some(&column_info.datatype),
                 move |value| {
-                    <TableInfoUI as UIComponent>::EventType::message(
-                        <TableInfoUI as UIComponent>::EventType::UpdateColumnType(index, value),
+                    <BTableInfoUI as UIComponent>::EventType::message(
+                        <BTableInfoUI as UIComponent>::EventType::UpdateColumnType(index, value),
                     )
                 },
             )
@@ -160,8 +161,8 @@ impl TableInfoUI {
 
             // Button to remove the column
             let remove_button = button("Remove")
-                .on_press(<TableInfoUI as UIComponent>::EventType::message(
-                    <TableInfoUI as UIComponent>::EventType::RemoveColumn(index),
+                .on_press(<BTableInfoUI as UIComponent>::EventType::message(
+                    <BTableInfoUI as UIComponent>::EventType::RemoveColumn(index),
                 ))
                 .padding(5);
 

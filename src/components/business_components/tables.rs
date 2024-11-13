@@ -2,11 +2,13 @@ use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnsInfo, BDataType, BTable, BTableChangeEvents,
     BTableIn, BTableInfo, BusinessComponent,
 };
+use crate::components::business_components::table_info::TableInfo;
 
 #[derive(Debug, Clone)]
 pub struct Tables {
     repository: BRepository,
     pub tables: Option<Vec<BTable>>,
+    pub table_info: Option<TableInfo>,
 }
 
 impl BusinessComponent for Tables {
@@ -20,7 +22,14 @@ impl Tables {
         Self {
             repository,
             tables: None,
+            table_info: None,
         }
+    }
+
+    pub async fn set_table_info(&mut self, table_name: String) {
+        let mut table_info = TableInfo::new(self.repository.clone(), table_name);
+        table_info.initialize_component().await;
+        self.table_info = Some(table_info);
     }
 
     pub async fn add_table(&mut self, table_in: BTableIn) {
