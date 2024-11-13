@@ -46,6 +46,7 @@ pub struct TableIn {
     pub columns: Vec<Column>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum TableChangeEvents {
     ChangeTableName(String),
     ChangeColumnDataType(String, DataType),

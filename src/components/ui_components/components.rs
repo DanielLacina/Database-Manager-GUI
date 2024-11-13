@@ -42,6 +42,7 @@ impl UIComponent for UIComponents {
 
 impl UIComponents {
     pub async fn new() -> Self {
+        /* creates repositories */
         let business_components = BusinessComponents::new().await;
         Self {
             home_ui: HomeUI::new(business_components.home, business_components.tables),

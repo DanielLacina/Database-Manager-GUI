@@ -19,8 +19,9 @@ use iced::{
 
 #[derive(Debug, Clone)]
 pub struct TableInfoUI {
-    table_name: String,
-    columns: Vec<BColumn>,
+    table_info: BTableInfo,
+    table_name_display: String,
+    columns_display: Vec<BColumn>,
 }
 
 impl UIComponent for TableInfoUI {
@@ -31,29 +32,29 @@ impl UIComponent for TableInfoUI {
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
             Self::EventType::AddColumn => {
-                self.columns.push(BColumn::default());
+                self.columns_display.push(BColumn::default());
                 Task::none()
             }
             Self::EventType::RemoveColumn(index) => {
-                if index < self.columns.len() {
-                    self.columns.remove(index);
+                if index < self.columns_display.len() {
+                    self.columns_display.remove(index);
                 }
                 Task::none()
             }
             Self::EventType::UpdateColumnName(index, input) => {
-                if let Some(column) = self.columns.get_mut(index) {
+                if let Some(column) = self.columns_display.get_mut(index) {
                     column.name = input;
                 }
                 Task::none()
             }
             Self::EventType::UpdateColumnType(index, input) => {
-                if let Some(column) = self.columns.get_mut(index) {
+                if let Some(column) = self.columns_display.get_mut(index) {
                     column.datatype = input;
                 }
                 Task::none()
             }
             Self::EventType::UpdateTableName(input) => {
-                self.table_name = input;
+                self.table_name_display = input;
                 Task::none()
             }
         }
@@ -63,8 +64,8 @@ impl UIComponent for TableInfoUI {
 impl TableInfoUI {
     pub fn new(table_info: BTableInfo) -> Self {
         Self {
-            table_name: table_info.table_name,
-            columns: table_info.columns_info,
+            table_name_display: table_info.table_name,
+            columns_display: table_info.columns_info,
         }
     }
 
@@ -101,7 +102,7 @@ impl TableInfoUI {
 
     /// Builds the input for the table name with styling
     fn build_table_name_input(&self) -> TextInput<'_, Message> {
-        text_input("Table Name", &self.table_name)
+        text_input("Table Name", &self.table_name_display)
             .on_input(|value| {
                 <TableInfoUI as UIComponent>::EventType::message(
                     <TableInfoUI as UIComponent>::EventType::UpdateTableName(value),
@@ -135,7 +136,7 @@ impl TableInfoUI {
     fn build_columns_info(&self) -> Column<'_, Message> {
         let mut columns_info_column = Column::new();
 
-        for (index, column_info) in self.columns.iter().enumerate() {
+        for (index, column_info) in self.columns_display.iter().enumerate() {
             // Input for column name
             let name_input = text_input("Column Name", &column_info.name)
                 .on_input(move |value| {
