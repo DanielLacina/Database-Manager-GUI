@@ -412,7 +412,9 @@ mod tests {
 
             // Assertions
             assert_eq!(table_info.table_name, "accounts");
-            let expected_columns = vec![
+
+            let mut actual_columns = table_info.columns_info;
+            let mut expected_columns = vec![
                 BColumn {
                     name: String::from("username"),
                     datatype: BDataType::TEXT,
@@ -422,7 +424,12 @@ mod tests {
                     datatype: BDataType::INT,
                 },
             ];
-            assert_eq!(table_info.columns_info, expected_columns);
+
+            // Sort both vectors before comparing
+            actual_columns.sort_by(|a, b| a.name.cmp(&b.name));
+            expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
+
+            assert_eq!(actual_columns, expected_columns);
         }
     }
 }

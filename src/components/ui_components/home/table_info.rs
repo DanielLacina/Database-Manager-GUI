@@ -1,11 +1,13 @@
 use crate::components::business_components::{
-    component::{BColumn, BDataType, BTable, BTableIn, BTableInfo, BusinessComponent},
+    component::{
+        BColumn, BDataType, BTable, BTableChangeEvents, BTableIn, BTableInfo, BusinessComponent,
+    },
     components::BusinessTables,
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    home::events::BTableInfoMessage,
+    home::events::TableInfoMessage,
 };
 use iced::{
     border,
@@ -18,14 +20,14 @@ use iced::{
 };
 
 #[derive(Debug, Clone)]
-pub struct BTableInfoUI {
+pub struct TableInfoUI {
     table_info: BTableInfo,
     table_name_display: String,
     columns_display: Vec<BColumn>,
 }
 
-impl UIComponent for BTableInfoUI {
-    type EventType = BTableInfoMessage;
+impl UIComponent for TableInfoUI {
+    type EventType = TableInfoMessage;
 
     async fn initialize_component(&mut self) {}
 
@@ -41,27 +43,58 @@ impl UIComponent for BTableInfoUI {
                 }
                 Task::none()
             }
-            Self::EventType::UpdateColumnName(index, input) => {
+            Self::EventType::UpdateColumnName(index, new_column_name) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
-                    column.name = input;
+                    let original_column_name = column.name.clone();
+                    column.name = new_column_name.clone();
+                    self.table_info
+                        .add_table_change_event(BTableChangeEvents::ChangeColumnName(
+                            original_column_name,
+                            new_column_name,
+                        ));
                 }
                 Task::none()
             }
-            Self::EventType::UpdateColumnType(index, input) => {
+            Self::EventType::UpdateColumnType(index, new_datatype) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
-                    column.datatype = input;
+                    column.datatype = new_datatype.clone();
+                    self.table_info.add_table_change_event(
+                        BTableChangeEvents::ChangeColumnDataType(column.name.clone(), new_datatype),
+                    );
                 }
                 Task::none()
             }
-            Self::EventType::UpdateTableName(input) => {
-                self.table_name_display = input;
+            Self::EventType::UpdateTableName(new_table_name) => {
+                self.table_name_display = new_table_name.clone();
+                self.table_info
+                    .add_table_change_event(BTableChangeEvents::ChangeTableName(new_table_name));
+                Task::none()
+            }
+            Self::EventType::SubmitUpdateTable => {
+                let mut table_info = self.table_info.clone();
+                Task::perform(
+                    async move {
+                        table_info.alter_table().await;
+                        table_info
+                    },
+                    |updated_table_info| {
+                        Self::EventType::message(Self::EventType::UpdateTableInfo(
+                            updated_table_info,
+                        ))
+                    },
+                )
+            }
+            Self::EventType::UpdateTableInfo(updated_table_info) => {
+                self.columns_display = updated_table_info.columns_info.clone();
+                self.table_name_display = updated_table_info.table_name.clone();
+                self.table_info = updated_table_info;
                 Task::none()
             }
         }
     }
 }
 
-impl BTableInfoUI {
+impl TableInfoUI {
     pub fn new(table_info: BTableInfo) -> Self {
         Self {
             table_info: table_info.clone(),
@@ -91,11 +124,16 @@ impl BTableInfoUI {
 
         // Add "Add Column" button
         let add_column_button = button("Add Column")
-            .on_press(<BTableInfoUI as UIComponent>::EventType::message(
-                <BTableInfoUI as UIComponent>::EventType::AddColumn,
+            .on_press(<TableInfoUI as UIComponent>::EventType::message(
+                <TableInfoUI as UIComponent>::EventType::AddColumn,
             ))
             .padding(10);
         table_info_column = table_info_column.push(add_column_button);
+        let submit_update_table_button =
+            button("Update Table").on_press(<TableInfoUI as UIComponent>::EventType::message(
+                <TableInfoUI as UIComponent>::EventType::SubmitUpdateTable,
+            ));
+        table_info_column = table_info_column.push(submit_update_table_button);
 
         // Wrap everything in a container and return as an Element
         container(table_info_column).padding(20).into()
@@ -105,8 +143,8 @@ impl BTableInfoUI {
     fn build_table_name_input(&self) -> TextInput<'_, Message> {
         text_input("Table Name", &self.table_name_display)
             .on_input(|value| {
-                <BTableInfoUI as UIComponent>::EventType::message(
-                    <BTableInfoUI as UIComponent>::EventType::UpdateTableName(value),
+                <TableInfoUI as UIComponent>::EventType::message(
+                    <TableInfoUI as UIComponent>::EventType::UpdateTableName(value),
                 )
             })
             .size(30)
@@ -141,8 +179,8 @@ impl BTableInfoUI {
             // Input for column name
             let name_input = text_input("Column Name", &column_info.name)
                 .on_input(move |value| {
-                    <BTableInfoUI as UIComponent>::EventType::message(
-                        <BTableInfoUI as UIComponent>::EventType::UpdateColumnName(index, value),
+                    <TableInfoUI as UIComponent>::EventType::message(
+                        <TableInfoUI as UIComponent>::EventType::UpdateColumnName(index, value),
                     )
                 })
                 .width(200);
@@ -152,8 +190,8 @@ impl BTableInfoUI {
                 vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
                 Some(&column_info.datatype),
                 move |value| {
-                    <BTableInfoUI as UIComponent>::EventType::message(
-                        <BTableInfoUI as UIComponent>::EventType::UpdateColumnType(index, value),
+                    <TableInfoUI as UIComponent>::EventType::message(
+                        <TableInfoUI as UIComponent>::EventType::UpdateColumnType(index, value),
                     )
                 },
             )
@@ -161,8 +199,8 @@ impl BTableInfoUI {
 
             // Button to remove the column
             let remove_button = button("Remove")
-                .on_press(<BTableInfoUI as UIComponent>::EventType::message(
-                    <BTableInfoUI as UIComponent>::EventType::RemoveColumn(index),
+                .on_press(<TableInfoUI as UIComponent>::EventType::message(
+                    <TableInfoUI as UIComponent>::EventType::RemoveColumn(index),
                 ))
                 .padding(5);
 

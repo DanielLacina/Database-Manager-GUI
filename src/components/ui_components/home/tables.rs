@@ -6,7 +6,7 @@ use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
     home::events::TablesMessage,
-    home::table_info::BTableInfoUI,
+    home::table_info::TableInfoUI,
 };
 use iced::{
     widget::{
@@ -22,7 +22,7 @@ pub struct TablesUI {
     pub show_create_table_form: bool,
     pub create_table_input: BTableIn,
     pub tables: BusinessTables,
-    pub single_table_info: Option<BTableInfoUI>,
+    pub single_table_info: Option<TableInfoUI>,
 }
 
 impl UIComponent for TablesUI {
@@ -109,7 +109,7 @@ impl UIComponent for TablesUI {
                 )
             }
             Self::EventType::SetSingleBTableInfo(table_info) => {
-                self.single_table_info = Some(BTableInfoUI::new(table_info));
+                self.single_table_info = Some(TableInfoUI::new(table_info));
                 Task::none()
             }
             Self::EventType::UndisplayBTableInfo => {
@@ -363,7 +363,7 @@ impl TablesUI {
     /// Displays information for a single table
     fn single_table_info_section<'a>(
         &'a self,
-        table_info: &'a BTableInfoUI,
+        table_info: &'a TableInfoUI,
     ) -> Element<'a, Message> {
         let undisplay_button =
             button("Undisplay").on_press(<TablesUI as UIComponent>::EventType::message(

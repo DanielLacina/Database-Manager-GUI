@@ -42,12 +42,14 @@ impl Event for TablesMessage {
 }
 
 #[derive(Debug, Clone)]
-pub enum BTableInfoMessage {
+pub enum TableInfoMessage {
     AddColumn,                          // Event to add a new column to the form
     RemoveColumn(usize),                // Event to remove a specific column by index
     UpdateColumnName(usize, String),    // Event to update the name of a specific column
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
+    SubmitUpdateTable,
+    UpdateTableInfo(BTableInfo),
 }
 
 impl Event for BTableInfoMessage {
