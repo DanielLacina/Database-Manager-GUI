@@ -97,6 +97,18 @@ WHERE table_name = '{}'",
                         current_table_name, old_name, new_name
                     )
                 }
+                TableChangeEvents::AddColumn(column_name, data_type) => {
+                    format!(
+                        "ALTER TABLE \"{}\" ADD COLUMN \"{}\" {}",
+                        current_table_name, column_name, data_type
+                    )
+                }
+                TableChangeEvents::RemoveColumn(column_name) => {
+                    format!(
+                        "ALTER TABLE \"{}\" DROP COLUMN \"{}\"",
+                        current_table_name, column_name
+                    )
+                }
             };
 
             // Execute the query within the transaction

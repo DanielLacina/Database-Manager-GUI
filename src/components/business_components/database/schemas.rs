@@ -51,4 +51,6 @@ pub enum TableChangeEvents {
     ChangeTableName(String),
     ChangeColumnDataType(String, DataType),
     ChangeColumnName(String, String),
+    AddColumn(String, DataType),
+    RemoveColumn(String),
 }

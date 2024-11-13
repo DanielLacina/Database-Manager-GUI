@@ -40,61 +40,116 @@ impl TableInfo {
         self.columns_info = columns_info_with_enum_datatype;
     }
 
-    pub fn add_table_change_event(&mut self, mut table_change_event: BTableChangeEvents) {
-        if let BTableChangeEvents::ChangeTableName(new_table_name) = &table_change_event {
-            // Remove any existing ChangeTableName events before adding the new one
-            self.table_change_events
-                .retain(|event| !matches!(event, BTableChangeEvents::ChangeTableName(_)));
-        }
-
-        if let BTableChangeEvents::ChangeColumnDataType(column_name, data_type) =
-            &table_change_event
-        {
-            self.table_change_events.retain(|event| {
-                // Only retain events that are not ChangeColumnDataType for the same column_name
-                match event {
-                    BTableChangeEvents::ChangeColumnDataType(existing_column_name, _) => {
-                        existing_column_name != column_name
-                    }
-                    _ => true, // Retain all other event types
-                }
-            });
-        }
-        if let BTableChangeEvents::ChangeColumnName(column_name, new_column_name) =
-            &table_change_event
-        {
-            // Step 1: Check for existing events with the same target column name
-            if let Some(existing_event_index) =
-                self.table_change_events
-                    .iter()
-                    .position(|event| match event {
-                        BTableChangeEvents::ChangeColumnName(original_column, modified_column) => {
-                            modified_column == column_name
-                        }
-                        _ => false,
-                    })
-            {
-                // Step 2: Update the new event with the original column name from the existing event
-                if let BTableChangeEvents::ChangeColumnName(original_column, _) =
-                    &self.table_change_events[existing_event_index]
-                {
-                    table_change_event = BTableChangeEvents::ChangeColumnName(
-                        original_column.clone(),
-                        new_column_name.clone(),
-                    );
-                }
-
-                // Step 3: Remove the existing event
-                self.table_change_events.remove(existing_event_index);
+    // Public function to add a table change event
+    pub fn add_table_change_event(&mut self, table_change_event: BTableChangeEvents) {
+        match &table_change_event {
+            BTableChangeEvents::ChangeTableName(new_table_name) => {
+                self.handle_change_table_name(table_change_event.clone());
+            }
+            BTableChangeEvents::ChangeColumnDataType(column_name, _) => {
+                self.handle_change_column_datatype(table_change_event.clone(), column_name);
+            }
+            BTableChangeEvents::ChangeColumnName(column_name, new_column_name) => {
+                self.handle_change_column_name(
+                    table_change_event.clone(),
+                    column_name,
+                    new_column_name,
+                );
+            }
+            BTableChangeEvents::RemoveColumn(column_name) => {
+                self.handle_remove_column(table_change_event.clone(), column_name);
+            }
+            _ => {
+                self.table_change_events.push(table_change_event.clone());
             }
         }
+        println!("{:?}", self.table_change_events);
+    }
 
-        // Add the new table change event
+    // Private helper function for handling ChangeTableName
+    fn handle_change_table_name(&mut self, table_change_event: BTableChangeEvents) {
+        self.table_change_events
+            .retain(|event| !matches!(event, BTableChangeEvents::ChangeTableName(_)));
         self.table_change_events.push(table_change_event);
     }
 
+    // Private helper function for handling ChangeColumnDataType
+    fn handle_change_column_datatype(
+        &mut self,
+        table_change_event: BTableChangeEvents,
+        column_name: &str,
+    ) {
+        self.table_change_events.retain(|event| {
+            !matches!(event, BTableChangeEvents::ChangeColumnDataType(existing_column_name, _)
+                if existing_column_name == column_name)
+        });
+        self.table_change_events.push(table_change_event);
+    }
+
+    // Private helper function for handling ChangeColumnName
+    fn handle_change_column_name(
+        &mut self,
+        mut table_change_event: BTableChangeEvents,
+        column_name: &str,
+        new_column_name: &str,
+    ) {
+        if let Some(existing_event_index) = self.find_existing_change_column_event(column_name) {
+            println!("found column name that was the result of another column name change");
+            if let BTableChangeEvents::ChangeColumnName(
+                original_column_name,
+                modified_column_name,
+            ) = &self.table_change_events[existing_event_index]
+            {
+                table_change_event = BTableChangeEvents::ChangeColumnName(
+                    original_column_name.clone(),
+                    new_column_name.to_string(),
+                );
+            }
+            self.table_change_events.remove(existing_event_index);
+        } else if let Some(existing_event_index) = self.find_existing_add_column_event(column_name)
+        {
+            if let BTableChangeEvents::AddColumn(_, added_data_type) =
+                &self.table_change_events[existing_event_index]
+            {
+                table_change_event = BTableChangeEvents::AddColumn(
+                    new_column_name.to_string(),
+                    added_data_type.clone(),
+                );
+            }
+            self.table_change_events.remove(existing_event_index);
+        }
+        self.table_change_events.push(table_change_event);
+    }
+
+    // Private helper function for handling RemoveColumn
+    fn handle_remove_column(&mut self, table_change_event: BTableChangeEvents, column_name: &str) {
+        if let Some(existing_event_index) = self.find_existing_add_column_event(column_name) {
+            self.table_change_events.remove(existing_event_index);
+        } else {
+            self.table_change_events.push(table_change_event);
+        }
+    }
+
+    // Utility function to find an existing ChangeColumnName event
+    fn find_existing_change_column_event(&self, column_name: &str) -> Option<usize> {
+        /* checks if the column name thats name is being changed wasnt the result of another column
+         * name being changed*/
+        self.table_change_events.iter().position(|event| {
+            matches!(event, BTableChangeEvents::ChangeColumnName(original_column_name, modified_column_name)
+                if modified_column_name == column_name)
+        })
+    }
+
+    // Utility function to find an existing AddColumn event
+    fn find_existing_add_column_event(&self, column_name: &str) -> Option<usize> {
+        self.table_change_events.iter().position(|event| {
+            matches!(event, BTableChangeEvents::AddColumn(existing_column_name, _)
+                if existing_column_name == column_name)
+        })
+    }
+
+    // Method to apply the stored change events to the table
     pub async fn alter_table(&mut self) {
-        // Apply the stored table change events
         if !self.table_change_events.is_empty() {
             let res = self
                 .repository
@@ -103,25 +158,15 @@ impl TableInfo {
             println!("Alter table result: {:?}", res);
         }
 
-        // Process the stored events to update the internal state
-        let mut new_table_name = self.table_name.clone(); // Copy the current table name
-
+        let mut new_table_name = self.table_name.clone();
         for event in &self.table_change_events {
-            match event {
-                BTableChangeEvents::ChangeTableName(updated_name) => {
-                    new_table_name = updated_name.clone();
-                }
-                _ => {}
+            if let BTableChangeEvents::ChangeTableName(updated_name) = event {
+                new_table_name = updated_name.clone();
             }
         }
 
-        // Update the internal table name and clear events
-        self.table_name = new_table_name;
         self.table_change_events.clear();
-
-        // Now call `set_table_info` with the updated table name
-        let updated_table_name = self.table_name.clone();
-        self.set_table_info(&updated_table_name).await;
+        self.set_table_info(&new_table_name).await;
     }
 }
 

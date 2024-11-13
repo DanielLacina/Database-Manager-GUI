@@ -34,12 +34,24 @@ impl UIComponent for TableInfoUI {
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
             Self::EventType::AddColumn => {
-                self.columns_display.push(BColumn::default());
+                let new_column = BColumn::default();
+                self.columns_display.push(new_column.clone());
+                self.table_info
+                    .add_table_change_event(BTableChangeEvents::AddColumn(
+                        new_column.name,
+                        new_column.datatype,
+                    ));
                 Task::none()
             }
             Self::EventType::RemoveColumn(index) => {
                 if index < self.columns_display.len() {
-                    self.columns_display.remove(index);
+                    if let Some(column) = self.columns_display.get_mut(index) {
+                        self.table_info
+                            .add_table_change_event(BTableChangeEvents::RemoveColumn(
+                                column.name.clone(),
+                            ));
+                        self.columns_display.remove(index);
+                    }
                 }
                 Task::none()
             }
@@ -53,6 +65,7 @@ impl UIComponent for TableInfoUI {
                             new_column_name,
                         ));
                 }
+
                 Task::none()
             }
             Self::EventType::UpdateColumnType(index, new_datatype) => {
