@@ -29,10 +29,10 @@ pub enum TablesMessage {
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
     TableCreated(BusinessTables, String),
-    GetSingleBTableInfo(String),
-    SetSingleBTableInfo(BTableInfo),
-    UndisplayBTableInfo,
-    SingleBTableInfo(BTableInfoMessage),
+    GetSingleTableInfo(String),
+    SetSingleTableInfo(BTableInfo),
+    UndisplayTableInfo,
+    SingleTableInfo(TableInfoMessage),
 }
 
 impl Event for TablesMessage {
@@ -52,8 +52,8 @@ pub enum TableInfoMessage {
     UpdateTableInfo(BTableInfo),
 }
 
-impl Event for BTableInfoMessage {
+impl Event for TableInfoMessage {
     fn message(event: Self) -> Message {
-        TablesMessage::message(TablesMessage::SingleBTableInfo(event))
+        TablesMessage::message(TablesMessage::SingleTableInfo(event))
     }
 }
