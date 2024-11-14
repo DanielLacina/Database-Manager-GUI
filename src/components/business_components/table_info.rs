@@ -78,17 +78,17 @@ impl TableInfo {
         if let Some(existing_remove_column_event_index) =
             self.find_existing_remove_column_event(column_name)
         {
-            println!("found remove column event");
+            //println!("found remove column event");
             if let BTableChangeEvents::RemoveColumn(original_column_name) =
                 &self.table_change_events[existing_remove_column_event_index]
             {
-                println!("found column name that was removed");
+                //println!("found column name that was removed");
                 if let Some(original_column) = self
                     .columns_info
                     .iter()
                     .find(|&column| column.name == *original_column_name)
                 {
-                    println!("found column datatype");
+                    //  println!("found column datatype");
                     if *data_type != original_column.datatype {
                         self.table_change_events
                             .remove(existing_remove_column_event_index);
@@ -121,11 +121,31 @@ impl TableInfo {
         table_change_event: BTableChangeEvents,
         column_name: &str,
     ) {
-        self.table_change_events.retain(|event| {
-            !matches!(event, BTableChangeEvents::ChangeColumnDataType(existing_column_name, _)
-                if existing_column_name == column_name)
-        });
-        self.table_change_events.push(table_change_event);
+        if let Some(existing_event_index) =
+            self.find_existing_change_data_type_column_event(&column_name)
+        {
+            if let BTableChangeEvents::ChangeColumnDataType(existing_column_name, data_type) =
+                table_change_event.clone()
+            {
+                if let Some(column) = self
+                    .columns_info
+                    .iter()
+                    .find(|&column| column.name == column_name)
+                {
+                    if column.datatype != data_type {
+                        self.table_change_events.remove(existing_event_index);
+                        self.table_change_events.push(table_change_event);
+                    } else {
+                        self.table_change_events.remove(existing_event_index);
+                    }
+                } else {
+                    self.table_change_events.remove(existing_event_index);
+                    self.table_change_events.push(table_change_event);
+                }
+            }
+        } else {
+            self.table_change_events.push(table_change_event);
+        }
     }
 
     fn handle_change_column_name(
@@ -222,12 +242,28 @@ impl TableInfo {
                 self.table_change_events.remove(event_index);
 
                 // Add a new ChangeColumnDataType event with the new column name
-                println!("{}", new_column_name.to_string());
-                self.table_change_events
-                    .push(BTableChangeEvents::ChangeColumnDataType(
-                        new_column_name.to_string(),
-                        data_type.clone(),
-                    ));
+                // column name should be the same as the original column name
+                // in the actual database
+                //  println!("{}", new_column_name.to_string());
+                if let Some(column) = self
+                    .columns_info
+                    .iter()
+                    .find(|&column| column.name == new_column_name)
+                {
+                    if column.datatype != data_type {
+                        self.table_change_events
+                            .push(BTableChangeEvents::ChangeColumnDataType(
+                                new_column_name.to_string(),
+                                data_type.clone(),
+                            ));
+                    }
+                } else {
+                    self.table_change_events
+                        .push(BTableChangeEvents::ChangeColumnDataType(
+                            new_column_name.to_string(),
+                            data_type.clone(),
+                        ));
+                }
             }
         }
     }
