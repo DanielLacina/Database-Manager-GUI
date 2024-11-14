@@ -82,13 +82,13 @@ impl TableInfo {
             if let BTableChangeEvents::RemoveColumn(original_column_name) =
                 &self.table_change_events[existing_remove_column_event_index]
             {
-                println!("got column name for remove column");
+                println!("found column name that was removed");
                 if let Some(original_column) = self
                     .columns_info
                     .iter()
                     .find(|&column| column.name == *original_column_name)
                 {
-                    println!("got column datatype");
+                    println!("found column datatype");
                     if *data_type != original_column.datatype {
                         self.table_change_events
                             .remove(existing_remove_column_event_index);
@@ -128,7 +128,6 @@ impl TableInfo {
         self.table_change_events.push(table_change_event);
     }
 
-    // Private helper function for handling ChangeColumnName
     fn handle_change_column_name(
         &mut self,
         mut table_change_event: BTableChangeEvents,
@@ -154,24 +153,59 @@ impl TableInfo {
                     }
                 }
                 self.table_change_events.remove(existing_event_index);
-            } else if let Some(existing_event_index) =
+            } else if let Some(existing_add_column_event_index) =
                 self.find_existing_add_column_event(column_name)
             {
+                /* checks if the column name was renamed after being added to the table
+                 * to convert it into an add column event and get rid of the previous add
+                 * column event to prevent redundant alter table statements */
                 if let BTableChangeEvents::AddColumn(_, added_data_type) =
-                    &self.table_change_events[existing_event_index]
+                    self.table_change_events[existing_add_column_event_index].clone()
                 {
+                    // Remove the old add column event
+                    self.table_change_events
+                        .remove(existing_add_column_event_index);
+
+                    // Convert the event to a new AddColumn event
+                    table_change_event = BTableChangeEvents::AddColumn(
+                        new_column_name.to_string(),
+                        added_data_type.clone(),
+                    );
+
+                    // Handle adding the column
                     self.handle_add_column(
-                        table_change_event,
+                        table_change_event.clone(),
                         new_column_name,
                         &added_data_type.clone(),
                     );
+
+                    // Check if there is an existing rename event for this column
+                    if let Some(existing_event_index) =
+                        self.find_existing_rename_column_event(column_name)
+                    {
+                        if let BTableChangeEvents::ChangeColumnDataType(
+                            original_column_name,
+                            data_type,
+                        ) = self.table_change_events[existing_event_index].clone()
+                        {
+                            // Remove the old datatype change event
+                            self.table_change_events.remove(existing_event_index);
+
+                            // Add a new ChangeColumnDataType event with the new column name
+                            self.table_change_events.push(
+                                BTableChangeEvents::ChangeColumnDataType(
+                                    new_column_name.to_string(),
+                                    data_type.clone(),
+                                ),
+                            );
+                        }
+                    }
                 }
-                self.table_change_events.remove(existing_event_index);
             } else {
                 self.table_change_events.push(table_change_event);
             }
         }
-    }
+    } // Private helper function for handling ChangeColumnName
 
     // Private helper function for handling RemoveColumn
     fn handle_remove_column(
@@ -186,6 +220,14 @@ impl TableInfo {
              * counter out that event to get rid of redundant events */
             self.table_change_events
                 .remove(existing_add_column_event_index);
+        } else if let Some(existing_change_column_data_type_event_index) =
+            self.find_existing_change_data_type_column_event(column_name)
+        {
+            /* checks if a column has been added to the table and was not already there so it can
+             * counter out that event to get rid of redundant events */
+            self.table_change_events
+                .remove(existing_change_column_data_type_event_index);
+            self.table_change_events.push(table_change_event);
         } else if let Some(existing_rename_column_event_index) =
             self.find_existing_rename_column_event(column_name)
         {
@@ -224,6 +266,13 @@ impl TableInfo {
     fn find_existing_add_column_event(&self, column_name: &str) -> Option<usize> {
         self.table_change_events.iter().position(|event| {
             matches!(event, BTableChangeEvents::AddColumn(existing_column_name, _)
+                if existing_column_name == column_name)
+        })
+    }
+
+    fn find_existing_change_data_type_column_event(&self, column_name: &str) -> Option<usize> {
+        self.table_change_events.iter().position(|event| {
+            matches!(event, BTableChangeEvents::ChangeColumnDataType(existing_column_name, _)
                 if existing_column_name == column_name)
         })
     }
