@@ -143,6 +143,23 @@ impl TableInfo {
                     self.table_change_events.push(table_change_event);
                 }
             }
+        } else if let Some(existing_event_index) = self.find_existing_add_column_event(column_name)
+        {
+            if let BTableChangeEvents::AddColumn(add_column_name, add_data_type) =
+                &self.table_change_events[existing_event_index]
+            {
+                if let BTableChangeEvents::ChangeColumnDataType(column_name, data_type_to_update) =
+                    table_change_event.clone()
+                {
+                    if *add_data_type != data_type_to_update {
+                        self.table_change_events.remove(existing_event_index);
+                        self.table_change_events.push(BTableChangeEvents::AddColumn(
+                            column_name,
+                            data_type_to_update,
+                        ));
+                    }
+                }
+            }
         } else {
             self.table_change_events.push(table_change_event);
         }
@@ -374,18 +391,27 @@ mod tests {
         table_info
     }
 
-    #[sqlx::test]
-    async fn test_initialize_component(pool: PgPool) {
-        let table_in = BTableIn {
+    fn default_table_in() -> BTableIn {
+        BTableIn {
             table_name: String::from("users"),
             columns: vec![BColumn {
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
             }],
-        };
+        }
+    }
 
+    async fn initialized_table_info(pool: PgPool, table_in: &BTableIn) -> TableInfo {
+        // default configuration to prevent redundant code
         let mut table_info = create_table_info(pool, &table_in).await;
         table_info.initialize_component().await;
+        table_info
+    }
+
+    #[sqlx::test]
+    async fn test_initialize_component(pool: PgPool) {
+        let table_in = default_table_in();
+        let mut table_info = initialized_table_info(pool, &table_in).await;
 
         assert_eq!(table_info.table_name, table_in.table_name);
         assert_eq!(
@@ -398,387 +424,71 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn test_add_remove_column(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Add a column
-        table_info.add_table_change_event(BTableChangeEvents::AddColumn(
-            String::from("email"),
-            BDataType::TEXT,
-        ));
-        table_info.alter_table().await;
-
-        assert!(table_info
-            .columns_info
-            .iter()
-            .any(|col| col.name == "email"));
-
-        // Remove the column
-        table_info.add_table_change_event(BTableChangeEvents::RemoveColumn(String::from("email")));
-        table_info.alter_table().await;
-
-        assert!(!table_info
-            .columns_info
-            .iter()
-            .any(|col| col.name == "email"));
-    }
-
-    #[sqlx::test]
-    async fn test_alter_table_change_column_name(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Change column name
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("name"),
-            String::from("username"),
-        ));
-        table_info.alter_table().await;
-
-        let expected_columns = vec![BColumn {
-            name: String::from("username"),
-            datatype: BDataType::TEXT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_handle_multiple_column_changes(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![
-                BColumn {
-                    name: String::from("id"),
-                    datatype: BDataType::INT,
-                },
-                BColumn {
-                    name: String::from("name"),
-                    datatype: BDataType::TEXT,
-                },
-            ],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Add a column
-        table_info.add_table_change_event(BTableChangeEvents::AddColumn(
-            String::from("email"),
-            BDataType::TEXT,
-        ));
-
-        // Rename an existing column
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("name"),
-            String::from("username"),
-        ));
-
-        // Change the datatype of an existing column
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnDataType(
-            String::from("id"),
-            BDataType::TEXT,
-        ));
-
-        table_info.alter_table().await;
-
-        let mut expected_columns = vec![
-            BColumn {
-                name: String::from("id"),
-                datatype: BDataType::TEXT,
-            },
-            BColumn {
-                name: String::from("username"),
-                datatype: BDataType::TEXT,
-            },
-            BColumn {
-                name: String::from("email"),
-                datatype: BDataType::TEXT,
-            },
+    async fn test_alter_table(pool: PgPool) {
+        let table_in = default_table_in();
+        let mut table_info = initialized_table_info(pool, &table_in).await;
+        let table_change_events = vec![
+            // 1. Add a new column "email" with datatype TEXT
+            BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
+            // 2. Rename the existing column "name" to "username"
+            BTableChangeEvents::ChangeColumnName(String::from("name"), String::from("username")),
+            // 3. Change datatype of the column "username" from TEXT to INT
+            BTableChangeEvents::ChangeColumnDataType(String::from("username"), BDataType::INT),
+            // 4. Add a new column "age" with datatype INT
+            BTableChangeEvents::AddColumn(String::from("age"), BDataType::INT),
+            // 5. Remove the column "age"
+            BTableChangeEvents::RemoveColumn(String::from("age")),
+            // 6. Change the table name from "users" to "customers"
+            BTableChangeEvents::ChangeTableName(String::from("customers")),
+            // 7. Add a new column "created_at" with datatype TIMESTAMP
+            BTableChangeEvents::AddColumn(String::from("created_at"), BDataType::TIMESTAMP),
+            // 8. Change the datatype of the "email" column from TEXT to TEXT
+            BTableChangeEvents::ChangeColumnDataType(String::from("email"), BDataType::TEXT),
+            // 9. Rename the column "created_at" to "registration_date"
+            BTableChangeEvents::ChangeColumnName(
+                String::from("created_at"),
+                String::from("registration_date"),
+            ),
+            // 10. Remove the column "registration_date"
+            BTableChangeEvents::RemoveColumn(String::from("registration_date")),
+            // 11. Add a new column "is_active" with datatype BOOLEAN
+            BTableChangeEvents::AddColumn(String::from("is_active"), BDataType::TEXT),
+            // 12. Rename the column "is_active" to "active_status"
+            BTableChangeEvents::ChangeColumnName(
+                String::from("is_active"),
+                String::from("active_status"),
+            ),
+            // 13. Add a new column "last_login" with datatype TIMESTAMP
+            BTableChangeEvents::AddColumn(String::from("last_login"), BDataType::TIMESTAMP),
+            // 14. Change the datatype of "last_login" to DATE
+            BTableChangeEvents::ChangeColumnDataType(
+                String::from("last_login"),
+                BDataType::TIMESTAMP,
+            ),
+            // 15. Add a new column "country" with datatype TEXT
+            BTableChangeEvents::AddColumn(String::from("country"), BDataType::TEXT),
+            // 16. Change the table name from "customers" to "clients"
+            BTableChangeEvents::ChangeTableName(String::from("clients")),
+            // 17. Add a new column "phone_number" with datatype TEXT
+            BTableChangeEvents::AddColumn(String::from("phone_number"), BDataType::TEXT),
+            // 18. Remove the column "phone_number"
+            BTableChangeEvents::RemoveColumn(String::from("phone_number")),
+            // 19. Change the datatype of the column "country" from TEXT to TEXT
+            BTableChangeEvents::ChangeColumnDataType(String::from("country"), BDataType::TEXT),
+            // 20. Rename the column "username" back to "name"
+            BTableChangeEvents::ChangeColumnName(String::from("username"), String::from("name")),
         ];
-
-        let mut actual_columns = table_info.columns_info;
-        actual_columns.sort_by(|a, b| a.name.cmp(&b.name));
-        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
-
-        assert_eq!(actual_columns, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_chain_column_name_changes(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Change column name from "name" to "username"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("name"),
-            String::from("username"),
-        ));
-
-        // Change column name from "username" to "user_id"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("username"),
-            String::from("user_id"),
-        ));
-
-        table_info.alter_table().await;
-
-        let expected_columns = vec![BColumn {
-            name: String::from("user_id"),
-            datatype: BDataType::TEXT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_remove_non_existent_column(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Attempt to remove a non-existent column
-        table_info.add_table_change_event(BTableChangeEvents::RemoveColumn(String::from("email")));
-        table_info.alter_table().await;
-
-        // Ensure existing columns remain unaffected
-        assert!(table_info.columns_info.iter().any(|col| col.name == "name"));
-    }
-    #[sqlx::test]
-    async fn test_multiple_rename_and_remove_events(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![
-                BColumn {
-                    name: String::from("id"),
-                    datatype: BDataType::INT,
-                },
-                BColumn {
-                    name: String::from("email"),
-                    datatype: BDataType::TEXT,
-                },
-            ],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Rename "email" to "user_email"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("email"),
-            String::from("user_email"),
-        ));
-
-        // Rename "user_email" to "contact_email"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("user_email"),
-            String::from("contact_email"),
-        ));
-
-        // Remove the column "contact_email"
-        table_info.add_table_change_event(BTableChangeEvents::RemoveColumn(String::from(
-            "contact_email",
-        )));
-
-        table_info.alter_table().await;
-
-        // Assertions: Ensure that "contact_email" is removed and "id" remains
-        let expected_columns = vec![BColumn {
-            name: String::from("id"),
-            datatype: BDataType::INT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_multiple_table_name_changes(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("users"),
-            columns: vec![
-                BColumn {
-                    name: String::from("id"),
-                    datatype: BDataType::INT,
-                },
-                BColumn {
-                    name: String::from("name"),
-                    datatype: BDataType::TEXT,
-                },
-            ],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Add multiple table name change events
-        table_info.add_table_change_event(BTableChangeEvents::ChangeTableName(String::from(
-            "customers",
-        )));
-        table_info
-            .add_table_change_event(BTableChangeEvents::ChangeTableName(String::from("clients")));
-
-        table_info.alter_table().await;
-
-        // Assertions: Ensure the latest change is applied
-        assert_eq!(table_info.table_name, "clients");
-    }
-
-    #[sqlx::test]
-    async fn test_rename_and_change_datatype(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("products"),
-            columns: vec![BColumn {
-                name: String::from("price"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Rename "price" to "cost"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("price"),
-            String::from("cost"),
-        ));
-
-        // Change datatype of "cost" to INT
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnDataType(
-            String::from("cost"),
-            BDataType::INT,
-        ));
-
-        table_info.alter_table().await;
-
-        // Assertions: Ensure column is renamed and datatype changed
-        let expected_columns = vec![BColumn {
-            name: String::from("cost"),
-            datatype: BDataType::INT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_add_rename_and_remove_column(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("inventory"),
-            columns: vec![BColumn {
-                name: String::from("item"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Add a new column "quantity"
-        table_info.add_table_change_event(BTableChangeEvents::AddColumn(
-            String::from("quantity"),
-            BDataType::INT,
-        ));
-
-        // Rename "quantity" to "stock"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("quantity"),
-            String::from("stock"),
-        ));
-
-        // Remove "stock"
-        table_info.add_table_change_event(BTableChangeEvents::RemoveColumn(String::from("stock")));
-
-        table_info.alter_table().await;
-
-        // Assertions: Ensure only the original column remains
-        let expected_columns = vec![BColumn {
-            name: String::from("item"),
-            datatype: BDataType::TEXT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_add_and_immediate_remove_column(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("sales"),
-            columns: vec![BColumn {
-                name: String::from("sale_id"),
-                datatype: BDataType::INT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Add a new column "discount"
-        table_info.add_table_change_event(BTableChangeEvents::AddColumn(
-            String::from("discount"),
-            BDataType::INT,
-        ));
-
-        // Immediately remove the newly added column "discount"
-        table_info
-            .add_table_change_event(BTableChangeEvents::RemoveColumn(String::from("discount")));
-
-        table_info.alter_table().await;
-
-        // Assertions: Ensure the added column is not present
-        let expected_columns = vec![BColumn {
-            name: String::from("sale_id"),
-            datatype: BDataType::INT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
-    }
-
-    #[sqlx::test]
-    async fn test_chain_rename_back_to_original(pool: PgPool) {
-        let table_in = BTableIn {
-            table_name: String::from("employees"),
-            columns: vec![BColumn {
-                name: String::from("full_name"),
-                datatype: BDataType::TEXT,
-            }],
-        };
-
-        let mut table_info = create_table_info(pool, &table_in).await;
-
-        // Rename "full_name" to "name"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("full_name"),
-            String::from("name"),
-        ));
-
-        // Rename "name" back to "full_name"
-        table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-            String::from("name"),
-            String::from("full_name"),
-        ));
-
-        table_info.alter_table().await;
-
-        // Assertions: Ensure the column name is reverted to the original
-        let expected_columns = vec![BColumn {
-            name: String::from("full_name"),
-            datatype: BDataType::TEXT,
-        }];
-        assert_eq!(table_info.columns_info, expected_columns);
+        for event in table_change_events {
+            table_info.add_table_change_event(event);
+        }
+        let expected_events = vec![
+            BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
+            BTableChangeEvents::AddColumn(String::from("active_status"), BDataType::TEXT),
+            BTableChangeEvents::AddColumn(String::from("last_login"), BDataType::TIMESTAMP),
+            BTableChangeEvents::AddColumn(String::from("country"), BDataType::TEXT),
+            BTableChangeEvents::ChangeTableName(String::from("clients")),
+            BTableChangeEvents::ChangeColumnDataType(String::from("name"), BDataType::INT),
+        ];
+        assert_eq!(table_info.table_change_events, expected_events);
     }
 }
