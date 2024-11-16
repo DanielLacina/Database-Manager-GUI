@@ -13,8 +13,8 @@ use iced::{
     border,
     font::Font,
     widget::{
-        button, column, container, row, scrollable, text, text_input, Column, PickList, Row, Text,
-        TextInput,
+        button, column, container, row, scrollable, text, text_input, Column, PickList, Row,
+        Scrollable, Text, TextInput,
     },
     Alignment, Background, Border, Color, Element, Length, Task, Theme,
 };
@@ -24,6 +24,7 @@ pub struct TableInfoUI {
     table_info: BTableInfo,
     table_name_display: String,
     columns_display: Vec<BColumn>,
+    table_change_events_display: Vec<String>,
 }
 
 impl UIComponent for TableInfoUI {
@@ -41,7 +42,9 @@ impl UIComponent for TableInfoUI {
                         new_column.name,
                         new_column.datatype,
                     ));
-                Task::none()
+                Task::done(Self::EventType::message(
+                    Self::EventType::UpdateTableChangeEventsDisplay,
+                ))
             }
             Self::EventType::RemoveColumn(index) => {
                 if index < self.columns_display.len() {
@@ -53,7 +56,9 @@ impl UIComponent for TableInfoUI {
                         self.columns_display.remove(index);
                     }
                 }
-                Task::none()
+                Task::done(Self::EventType::message(
+                    Self::EventType::UpdateTableChangeEventsDisplay,
+                ))
             }
             Self::EventType::UpdateColumnName(index, new_column_name) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
@@ -66,7 +71,9 @@ impl UIComponent for TableInfoUI {
                         ));
                 }
 
-                Task::none()
+                Task::done(Self::EventType::message(
+                    Self::EventType::UpdateTableChangeEventsDisplay,
+                ))
             }
             Self::EventType::UpdateColumnType(index, new_datatype) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
@@ -75,13 +82,17 @@ impl UIComponent for TableInfoUI {
                         BTableChangeEvents::ChangeColumnDataType(column.name.clone(), new_datatype),
                     );
                 }
-                Task::none()
+                Task::done(Self::EventType::message(
+                    Self::EventType::UpdateTableChangeEventsDisplay,
+                ))
             }
             Self::EventType::UpdateTableName(new_table_name) => {
                 self.table_name_display = new_table_name.clone();
                 self.table_info
                     .add_table_change_event(BTableChangeEvents::ChangeTableName(new_table_name));
-                Task::none()
+                Task::done(Self::EventType::message(
+                    Self::EventType::UpdateTableChangeEventsDisplay,
+                ))
             }
             Self::EventType::SubmitUpdateTable => {
                 let mut table_info = self.table_info.clone();
@@ -97,10 +108,17 @@ impl UIComponent for TableInfoUI {
                     },
                 )
             }
+            Self::EventType::UpdateTableChangeEventsDisplay => {
+                self.table_change_events_display
+                    .push(format!("{:?}", self.table_info.get_table_change_events()));
+                Task::none()
+            }
+
             Self::EventType::UpdateTableInfo(updated_table_info) => {
                 self.columns_display = updated_table_info.columns_info.clone();
                 self.table_name_display = updated_table_info.table_name.clone();
                 self.table_info = updated_table_info;
+                self.table_change_events_display = vec![];
                 Task::none()
             }
         }
@@ -113,6 +131,7 @@ impl TableInfoUI {
             table_info: table_info.clone(),
             table_name_display: table_info.table_name,
             columns_display: table_info.columns_info,
+            table_change_events_display: vec![],
         }
     }
 
@@ -147,9 +166,12 @@ impl TableInfoUI {
                 <TableInfoUI as UIComponent>::EventType::SubmitUpdateTable,
             ));
         table_info_column = table_info_column.push(submit_update_table_button);
+        let table_display = Row::new()
+            .push(table_info_column)
+            .push(self.table_change_events());
 
         // Wrap everything in a container and return as an Element
-        container(table_info_column).padding(20).into()
+        container(table_display).padding(20).into()
     }
 
     /// Builds the input for the table name with styling
@@ -184,6 +206,20 @@ impl TableInfoUI {
             .push(text("Data Type").size(20).width(Length::Fill))
     }
 
+    fn table_change_events(&self) -> Scrollable<'_, Message> {
+        let mut table_change_events_display = Column::new();
+
+        for table_change_event in self.table_change_events_display.clone() {
+            // Create a `Text` widget with wrapping
+            let text_widget = Text::new(table_change_event)
+                .width(300) // Set the maximum width before wrapping
+                .size(16); // Set the font size if needed
+
+            table_change_events_display = table_change_events_display.push(text_widget);
+        }
+
+        scrollable(table_change_events_display).height(400)
+    }
     /// Builds the input fields for the columns information
     fn build_columns_info(&self) -> Column<'_, Message> {
         let mut columns_info_column = Column::new();
