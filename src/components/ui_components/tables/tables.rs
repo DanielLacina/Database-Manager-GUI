@@ -81,7 +81,6 @@ impl UIComponent for TablesUI {
                 ))
             }
             Self::EventType::SubmitCreateTable(create_table_input) => {
-                /* could cause race conditions */
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {

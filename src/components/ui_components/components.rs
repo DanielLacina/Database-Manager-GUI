@@ -6,6 +6,7 @@ use crate::components::ui_components::{
     events::Message,
 };
 use crate::components::ui_components::{
+    console::console::Console,
     home::{events::HomeMessage, home::HomeUI},
     tables::tables::TablesUI,
 };
@@ -13,6 +14,7 @@ use iced::{futures::join, Task};
 
 pub type HomeUIComponent = HomeUI;
 pub type TablesUIComponent = TablesUI;
+pub type ConsoleComponent = Console;
 
 #[derive(Debug, Clone)]
 pub enum ComponentsMessage {
@@ -33,7 +35,8 @@ pub enum CurrentComponent {
 #[derive(Debug, Clone)]
 pub struct UIComponents {
     pub home_ui: HomeUIComponent,
-    pub tables_ui: TablesUI,
+    pub tables_ui: TablesUIComponent,
+    pub console: ConsoleComponent,
 }
 
 impl UIComponent for UIComponents {
@@ -55,6 +58,10 @@ impl UIComponents {
             home_ui.initialize_component(),
             tables_ui.initialize_component()
         );
-        Self { home_ui, tables_ui }
+        Self {
+            home_ui,
+            tables_ui,
+            console: Console::new(),
+        }
     }
 }

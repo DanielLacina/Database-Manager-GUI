@@ -73,6 +73,13 @@ impl Crm {
                     Task::none()
                 }
             }
+            Message::Console(console_message) => {
+                if let Some(components) = &mut self.components {
+                    components.console.update(console_message)
+                } else {
+                    Task::none()
+                }
+            }
         }
     }
 }
