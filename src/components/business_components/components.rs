@@ -1,5 +1,5 @@
 use crate::components::business_components::component::repository_module::BRepository;
-use crate::components::business_components::{home::Home, tables::Tables};
+use crate::components::business_components::{home::Home, tables::tables::Tables};
 
 pub type BusinessHome = Home;
 pub type BusinessTables = Tables;

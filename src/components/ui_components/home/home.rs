@@ -5,10 +5,8 @@ use crate::components::business_components::{
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    home::{
-        events::{HomeMessage, TablesMessage},
-        tables::TablesUI,
-    },
+    home::events::HomeMessage,
+    tables::{events::TablesMessage, tables::TablesUI},
 };
 use iced::{
     widget::{
@@ -21,7 +19,6 @@ use regex::Regex;
 #[derive(Debug, Clone)]
 pub struct HomeUI {
     pub home: BusinessHome,
-    pub tables_ui: TablesUI,
 }
 
 impl UIComponent for HomeUI {
@@ -29,7 +26,6 @@ impl UIComponent for HomeUI {
 
     async fn initialize_component(&mut self) {
         self.home.initialize_component().await;
-        self.tables_ui.initialize_component().await;
     }
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
@@ -52,23 +48,18 @@ impl UIComponent for HomeUI {
                 *self = home_ui_initialized;
                 Task::none()
             }
-
-            Self::EventType::Tables(tables_message) => self.tables_ui.update(tables_message),
         }
     }
 }
 
 impl HomeUI {
-    pub fn new(home: BusinessHome, tables: BusinessTables) -> Self {
-        Self {
-            home,
-            tables_ui: TablesUI::new(tables),
-        }
+    pub fn new(home: BusinessHome) -> Self {
+        Self { home }
     }
 
     /// Main content function that combines all UI components
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
-        self.tables_ui.content()
+        self.title()
     }
 
     /// Renders the title section

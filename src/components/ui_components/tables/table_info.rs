@@ -7,7 +7,7 @@ use crate::components::business_components::{
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    home::events::TableInfoMessage,
+    tables::events::TableInfoMessage,
 };
 use iced::{
     border,

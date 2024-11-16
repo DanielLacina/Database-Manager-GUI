@@ -2,7 +2,7 @@ use crate::components::business_components::database::models::{ColumnsInfo, Tabl
 use crate::components::business_components::database::schemas::{
     Column, DataType, TableChangeEvents, TableIn,
 };
-use crate::components::business_components::table_info::TableInfo;
+use crate::components::business_components::tables::table_info::TableInfo;
 
 pub type BTable = Table;
 pub type BColumnsInfo = ColumnsInfo;

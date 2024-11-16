@@ -2,7 +2,7 @@ use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnsInfo, BDataType, BTable, BTableChangeEvents,
     BTableIn, BTableInfo, BusinessComponent,
 };
-use crate::components::business_components::table_info::TableInfo;
+use crate::components::business_components::tables::table_info::TableInfo;
 
 #[derive(Debug, Clone)]
 pub struct Tables {
