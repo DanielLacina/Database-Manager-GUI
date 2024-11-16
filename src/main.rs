@@ -36,7 +36,10 @@ impl Crm {
     pub fn view(&self) -> Element<'_, Message> {
         if let Some(components) = &self.components {
             match self.current_component {
-                CurrentComponent::Home => components.home_ui.content(),
+                CurrentComponent::Home => Column::new()
+                    .push(components.home_ui.content())
+                    .push(components.tables_ui.content())
+                    .into(),
             }
         } else {
             column![container("loading")].into()
@@ -51,7 +54,7 @@ impl Crm {
                     match components_message {
                         ComponentsMessage::InitializeComponents(ui_components) => {
                             self.components = Some(ui_components);
-                            UIComponents::initialized_task_message()
+                            Task::none()
                         }
                     }
                 }
@@ -59,6 +62,13 @@ impl Crm {
             Message::Home(home_message) => {
                 if let Some(components) = &mut self.components {
                     components.home_ui.update(home_message)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::Tables(tables_message) => {
+                if let Some(components) = &mut self.components {
+                    components.tables_ui.update(tables_message)
                 } else {
                     Task::none()
                 }

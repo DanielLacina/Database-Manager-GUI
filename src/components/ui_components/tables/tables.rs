@@ -5,8 +5,7 @@ use crate::components::business_components::{
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    home::events::TablesMessage,
-    home::table_info::TableInfoUI,
+    tables::{events::TablesMessage, table_info::TableInfoUI},
 };
 use iced::{
     widget::{
