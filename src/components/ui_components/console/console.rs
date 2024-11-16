@@ -11,7 +11,6 @@ pub struct Console {
 impl UIComponent for Console {
     type EventType = ConsoleMessage;
 
-    async fn initialize_component(&mut self) {}
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         Task::none()
     }

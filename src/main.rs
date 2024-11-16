@@ -54,7 +54,7 @@ impl Crm {
                     match components_message {
                         ComponentsMessage::InitializeComponents(ui_components) => {
                             self.components = Some(ui_components);
-                            Task::none()
+                            UIComponents::initialize_startup_components_message()
                         }
                     }
                 }

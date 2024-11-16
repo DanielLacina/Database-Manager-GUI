@@ -8,9 +8,9 @@ use crate::components::ui_components::{
 use crate::components::ui_components::{
     console::console::Console,
     home::{events::HomeMessage, home::HomeUI},
-    tables::tables::TablesUI,
+    tables::{events::TablesMessage, tables::TablesUI},
 };
-use iced::{futures::join, Task};
+use iced::Task;
 
 pub type HomeUIComponent = HomeUI;
 pub type TablesUIComponent = TablesUI;
@@ -42,7 +42,6 @@ pub struct UIComponents {
 impl UIComponent for UIComponents {
     type EventType = ComponentsMessage;
 
-    async fn initialize_component(&mut self) {}
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         Task::none()
     }
@@ -52,16 +51,16 @@ impl UIComponents {
     pub async fn new() -> Self {
         /* creates repositories */
         let business_components = BusinessComponents::new().await;
-        let mut home_ui = HomeUI::new(business_components.home);
-        let mut tables_ui = TablesUI::new(business_components.tables);
-        let (home_result, tables_result) = join!(
-            home_ui.initialize_component(),
-            tables_ui.initialize_component()
-        );
         Self {
-            home_ui,
-            tables_ui,
+            home_ui: HomeUI::new(business_components.home),
+            tables_ui: TablesUI::new(business_components.tables),
             console: Console::new(),
         }
+    }
+
+    pub fn initialize_startup_components_message() -> Task<Message> {
+        Task::done(HomeMessage::message(HomeMessage::InitializeComponent)).chain(Task::done(
+            TablesMessage::message(TablesMessage::InitializeComponent),
+        ))
     }
 }

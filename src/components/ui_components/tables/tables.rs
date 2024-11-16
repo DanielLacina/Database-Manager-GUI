@@ -27,10 +27,6 @@ pub struct TablesUI {
 impl UIComponent for TablesUI {
     type EventType = TablesMessage;
 
-    async fn initialize_component(&mut self) {
-        self.tables.initialize_component().await;
-    }
-
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
             Self::EventType::UpdateTableFilter(input) => {
@@ -120,6 +116,20 @@ impl UIComponent for TablesUI {
                 } else {
                     Task::none()
                 }
+            }
+            Self::EventType::InitializeComponent => {
+                let mut tables = self.tables.clone();
+                Task::perform(
+                    async move {
+                        tables.initialize_component().await;
+                        tables
+                    },
+                    |tables| TablesMessage::message(TablesMessage::ComponentInitialized(tables)),
+                )
+            }
+            Self::EventType::ComponentInitialized(tables) => {
+                self.tables = tables;
+                Task::none()
             }
         }
     }
