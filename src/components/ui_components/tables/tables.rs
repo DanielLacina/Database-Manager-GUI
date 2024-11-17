@@ -33,7 +33,7 @@ impl UIComponent for TablesUI {
                 self.table_filter = input;
                 Task::none()
             }
-            Self::EventType::ShowCreateTableForm => {
+            Self::EventType::ShowOrRemoveCreateTableForm => {
                 if self.create_table_input.columns.len() == 0 {
                     for _ in 0..1 {
                         self.create_table_input.columns.push(BColumn::default());
@@ -187,7 +187,7 @@ impl TablesUI {
             "Show create table form"
         })
         .on_press(<TablesUI as UIComponent>::EventType::message(
-            <TablesUI as UIComponent>::EventType::ShowCreateTableForm,
+            <TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm,
         ));
 
         tables_display = tables_display.push(toggle_form_button);

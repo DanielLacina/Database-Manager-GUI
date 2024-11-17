@@ -12,13 +12,10 @@ use crate::components::ui_components::{
 };
 use iced::Task;
 
-pub type HomeUIComponent = HomeUI;
-pub type TablesUIComponent = TablesUI;
-pub type ConsoleComponent = Console;
-
 #[derive(Debug, Clone)]
 pub enum ComponentsMessage {
     InitializeComponents(UIComponents),
+    ShowOrRemoveConsole,
 }
 
 impl Event for ComponentsMessage {
@@ -34,16 +31,24 @@ pub enum CurrentComponent {
 
 #[derive(Debug, Clone)]
 pub struct UIComponents {
-    pub home_ui: HomeUIComponent,
-    pub tables_ui: TablesUIComponent,
-    pub console: ConsoleComponent,
+    pub home_ui: HomeUI,
+    pub tables_ui: TablesUI,
+    pub console: Console,
+    pub current_component: CurrentComponent,
+    pub show_console: bool,
 }
 
 impl UIComponent for UIComponents {
     type EventType = ComponentsMessage;
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
-        Task::none()
+        match message {
+            Self::EventType::ShowOrRemoveConsole => {
+                self.show_console = !self.show_console;
+                Task::none()
+            }
+            _ => Task::none(),
+        }
     }
 }
 
@@ -55,6 +60,8 @@ impl UIComponents {
             home_ui: HomeUI::new(business_components.home),
             tables_ui: TablesUI::new(business_components.tables),
             console: Console::new(),
+            current_component: CurrentComponent::Home,
+            show_console: false,
         }
     }
 
