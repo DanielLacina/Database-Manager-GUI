@@ -103,6 +103,8 @@ impl UIComponent for TablesUI {
                 )
             }
             Self::EventType::SetSingleTableInfo(table_info) => {
+                self.tables.table_info = None; // object is no longer needed becasue logic is in
+                                               // the table info ui component
                 self.single_table_info = Some(TableInfoUI::new(table_info));
                 Task::none()
             }
