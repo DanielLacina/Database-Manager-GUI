@@ -1,12 +1,10 @@
 use crate::components::business_components::{
-    component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
-    components::{BusinessHome, BusinessTables},
+    component::BusinessComponent, components::BusinessHome,
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
     home::events::HomeMessage,
-    tables::{events::TablesMessage, tables::TablesUI},
 };
 use iced::{
     widget::{
@@ -14,7 +12,6 @@ use iced::{
     },
     Alignment, Background, Border, Color, Element, Length, Task, Theme,
 };
-use regex::Regex;
 
 #[derive(Debug, Clone)]
 pub struct HomeUI {
@@ -24,28 +21,20 @@ pub struct HomeUI {
 impl UIComponent for HomeUI {
     type EventType = HomeMessage;
 
-    async fn initialize_component(&mut self) {
-        self.home.initialize_component().await;
-    }
-
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
             Self::EventType::InitializeComponent => {
-                let mut home_ui = self.clone();
+                let mut home = self.home.clone();
                 Task::perform(
                     async move {
-                        home_ui.initialize_component().await;
-                        home_ui
+                        home.initialize_component().await;
+                        home
                     },
-                    |home_ui_initialized| {
-                        Self::EventType::message(Self::EventType::ComponentInitialized(
-                            home_ui_initialized,
-                        ))
-                    },
+                    |home| Self::EventType::message(Self::EventType::ComponentInitialized(home)),
                 )
             }
-            Self::EventType::ComponentInitialized(home_ui_initialized) => {
-                *self = home_ui_initialized;
+            Self::EventType::ComponentInitialized(home) => {
+                self.home = home;
                 Task::none()
             }
         }

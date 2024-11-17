@@ -1,6 +1,6 @@
 use crate::components::business_components::{
     component::{BDataType, BTable, BTableIn, BTableInfo},
-    components::{BusinessHome, BusinessTables},
+    components::BusinessTables,
 };
 use crate::components::ui_components::{component::Event, events::Message};
 
@@ -19,6 +19,8 @@ pub enum TablesMessage {
     SetSingleTableInfo(BTableInfo),
     UndisplayTableInfo,
     SingleTableInfo(TableInfoMessage),
+    InitializeComponent,
+    ComponentInitialized(BusinessTables),
 }
 
 impl Event for TablesMessage {

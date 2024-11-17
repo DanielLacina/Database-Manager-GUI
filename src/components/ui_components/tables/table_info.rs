@@ -30,8 +30,6 @@ pub struct TableInfoUI {
 impl UIComponent for TableInfoUI {
     type EventType = TableInfoMessage;
 
-    async fn initialize_component(&mut self) {}
-
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
             Self::EventType::AddColumn => {

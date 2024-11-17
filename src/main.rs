@@ -54,7 +54,7 @@ impl Crm {
                     match components_message {
                         ComponentsMessage::InitializeComponents(ui_components) => {
                             self.components = Some(ui_components);
-                            Task::none()
+                            UIComponents::initialize_startup_components_message()
                         }
                     }
                 }
@@ -69,6 +69,13 @@ impl Crm {
             Message::Tables(tables_message) => {
                 if let Some(components) = &mut self.components {
                     components.tables_ui.update(tables_message)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::Console(console_message) => {
+                if let Some(components) = &mut self.components {
+                    components.console.update(console_message)
                 } else {
                     Task::none()
                 }
