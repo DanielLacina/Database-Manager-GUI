@@ -2,10 +2,11 @@ use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BDataType, BTable, BTableIn, BTableInfo,
     BusinessComponent,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Home {
-    repository: BRepository,
+    repository: Arc<BRepository>,
     pub title: Option<String>,
 }
 
@@ -16,7 +17,7 @@ impl BusinessComponent for Home {
 }
 
 impl Home {
-    pub fn new(repository: BRepository) -> Self {
+    pub fn new(repository: Arc<BRepository>) -> Self {
         Self {
             repository,
             title: None,

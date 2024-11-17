@@ -3,10 +3,11 @@ use crate::components::business_components::component::{
     BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::tables::table_info::TableInfo;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct Tables {
-    repository: BRepository,
+    repository: Arc<BRepository>,
     pub tables: Option<Vec<BTable>>,
     pub table_info: Option<TableInfo>,
 }
@@ -18,7 +19,7 @@ impl BusinessComponent for Tables {
 }
 
 impl Tables {
-    pub fn new(repository: BRepository) -> Self {
+    pub fn new(repository: Arc<BRepository>) -> Self {
         Self {
             repository,
             tables: None,
@@ -45,7 +46,7 @@ mod tests {
 
     async fn tables_business_component(pool: PgPool) -> Tables {
         let repository = BRepository::new(Some(pool)).await;
-        Tables::new(repository)
+        Tables::new(repository.into())
     }
 
     #[sqlx::test]

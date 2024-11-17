@@ -2,10 +2,11 @@ use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnsInfo, BDataType, BTable, BTableChangeEvents,
     BTableIn, BusinessComponent,
 };
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct TableInfo {
-    repository: BRepository,
+    repository: Arc<BRepository>,
     pub table_name: String,
     pub columns_info: Vec<BColumn>,
     table_change_events: Vec<BTableChangeEvents>,
@@ -18,7 +19,7 @@ impl BusinessComponent for TableInfo {
 }
 
 impl TableInfo {
-    pub fn new(repository: BRepository, table_name: String) -> Self {
+    pub fn new(repository: Arc<BRepository>, table_name: String) -> Self {
         Self {
             repository,
             table_name,
@@ -414,7 +415,7 @@ mod tests {
     async fn create_table_info(pool: PgPool, table_in: &BTableIn) -> TableInfo {
         let repository = BRepository::new(Some(pool)).await;
         repository.create_table(table_in).await;
-        let mut table_info = TableInfo::new(repository, table_in.table_name.clone());
+        let mut table_info = TableInfo::new(repository.into(), table_in.table_name.clone());
         table_info.set_table_info().await;
         table_info
     }
