@@ -6,7 +6,7 @@ use crate::components::ui_components::{
     events::Message,
 };
 use iced::{
-    widget::{button, column, container, row, text, Column, Text},
+    widget::{button, column, container, row, text, Column, Row, Text},
     Element, Settings, Task, Theme,
 };
 
@@ -36,9 +36,13 @@ impl Crm {
     pub fn view(&self) -> Element<'_, Message> {
         if let Some(components) = &self.components {
             match self.current_component {
-                CurrentComponent::Home => Column::new()
-                    .push(components.home_ui.content())
-                    .push(components.tables_ui.content())
+                CurrentComponent::Home => Row::new()
+                    .push(
+                        Column::new()
+                            .push(components.home_ui.content())
+                            .push(components.tables_ui.content()),
+                    )
+                    .push(components.console.content())
                     .into(),
             }
         } else {
