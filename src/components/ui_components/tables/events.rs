@@ -38,7 +38,6 @@ pub enum TableInfoMessage {
     UpdateTableName(String),
     SubmitUpdateTable,
     UpdateTableInfo(BTableInfo),
-    UpdateTableChangeEventsDisplay,
 }
 
 impl Event for TableInfoMessage {
