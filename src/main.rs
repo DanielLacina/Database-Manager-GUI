@@ -1,7 +1,6 @@
 mod components;
-
 use crate::components::ui_components::{
-    component::UIComponent,
+    component::{Event, UIComponent},
     components::{ComponentsMessage, CurrentComponent, UIComponents},
     events::Message,
 };
@@ -11,17 +10,13 @@ use iced::{
 };
 
 pub struct Crm {
-    current_component: CurrentComponent,
     components: Option<UIComponents>,
 }
 
 impl Crm {
     pub fn setup() -> (Self, Task<Message>) {
         (
-            Self {
-                current_component: CurrentComponent::Home,
-                components: None,
-            },
+            Self { components: None },
             Task::perform(UIComponents::new(), |components| {
                 Message::Components(ComponentsMessage::InitializeComponents(components))
             }),
@@ -35,15 +30,36 @@ impl Crm {
     }
     pub fn view(&self) -> Element<'_, Message> {
         if let Some(components) = &self.components {
-            match self.current_component {
-                CurrentComponent::Home => Row::new()
-                    .push(
+            match components.current_component {
+                CurrentComponent::Home => {
+                    let mut display = Row::new();
+
+                    // Add the main content
+                    display = display.push(
                         Column::new()
                             .push(components.home_ui.content())
                             .push(components.tables_ui.content()),
-                    )
-                    .push(components.console.content())
-                    .into(),
+                    );
+
+                    // Add the "Show Console" button
+                    display = display.push(
+                        button(if components.show_console {
+                            "Remove Console"
+                        } else {
+                            "Show Console"
+                        })
+                        .on_press(ComponentsMessage::message(
+                            ComponentsMessage::ShowOrRemoveConsole,
+                        )),
+                    );
+
+                    // Conditionally add the console content
+                    if components.show_console {
+                        display = display.push(components.console.content());
+                    }
+
+                    display.into()
+                }
             }
         } else {
             column![container("loading")].into()
@@ -60,6 +76,7 @@ impl Crm {
                             self.components = Some(ui_components);
                             UIComponents::initialize_startup_components_message()
                         }
+                        _ => Task::none(),
                     }
                 }
             }
