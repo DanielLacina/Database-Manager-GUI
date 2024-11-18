@@ -11,7 +11,8 @@ use iced::{
     alignment,
     border::Radius,
     widget::{
-        button, column, container, row, scrollable, text, text_input, Column, PickList, Row, Text,
+        button, column, container, row, scrollable, text, text_input, Button, Column, PickList,
+        Row, Text,
     },
     Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
@@ -24,6 +25,7 @@ pub struct TablesUI {
     pub create_table_input: BTableIn,
     pub tables: BusinessTables,
     pub single_table_info: Option<TableInfoUI>,
+    pub table_to_delete: Option<String>,
 }
 
 impl UIComponent for TablesUI {
@@ -121,6 +123,10 @@ impl UIComponent for TablesUI {
                     Task::none()
                 }
             }
+            Self::EventType::RequestDeleteTable(table_name) => {
+                self.table_to_delete = Some(table_name);
+                Task::none()
+            }
             Self::EventType::InitializeComponent => {
                 let mut tables = self.tables.clone();
                 Task::perform(
@@ -128,11 +134,35 @@ impl UIComponent for TablesUI {
                         tables.initialize_component().await;
                         tables
                     },
-                    |tables| TablesMessage::message(TablesMessage::ComponentInitialized(tables)),
+                    |tables| {
+                        Self::EventType::message(Self::EventType::ComponentInitialized(tables))
+                    },
                 )
             }
             Self::EventType::ComponentInitialized(tables) => {
                 self.tables = tables;
+                Task::none()
+            }
+            Self::EventType::ConfirmDeleteTable => {
+                if let Some(table_to_delete) = self.table_to_delete.clone() {
+                    self.table_to_delete = None;
+                    let mut tables = self.tables.clone();
+
+                    Task::perform(
+                        async move {
+                            tables.delete_table(table_to_delete).await;
+                            tables
+                        },
+                        |tables| {
+                            Self::EventType::message(Self::EventType::ComponentInitialized(tables))
+                        },
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+            Self::EventType::CancelDeleteTable => {
+                self.table_to_delete = None;
                 Task::none()
             }
         }
@@ -147,6 +177,7 @@ impl TablesUI {
             create_table_input: BTableIn::default(),
             tables,
             single_table_info: None,
+            table_to_delete: None,
         }
     }
 
@@ -234,6 +265,33 @@ impl TablesUI {
             .into()
     }
 
+    fn delete_table_confirmation_modal<'a>(&self) -> Element<'a, Message> {
+        let confirm_button = Button::new(text("Yes, delete"))
+            .on_press(<TablesUI as UIComponent>::EventType::message(
+                <TablesUI as UIComponent>::EventType::ConfirmDeleteTable,
+            ))
+            .style(|_, _| delete_button_style());
+
+        let cancel_button =
+            Button::new(text("Cancel")).on_press(<TablesUI as UIComponent>::EventType::message(
+                <TablesUI as UIComponent>::EventType::CancelDeleteTable,
+            ));
+
+        let modal_content = Column::new()
+            .spacing(20)
+            .push(Text::new(format!(
+                "Are you sure you want to delete the table {}?",
+                self.table_to_delete.clone().unwrap()
+            )))
+            .push(
+                Row::new()
+                    .spacing(10)
+                    .push(confirm_button)
+                    .push(cancel_button),
+            );
+
+        container(modal_content).padding(20).into()
+    }
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
         if let Some(tables) = &self.tables.tables {
             let mut tables_column = Column::new().spacing(10).padding(10);
@@ -243,23 +301,38 @@ impl TablesUI {
                 .iter()
                 .filter(|t| table_filter_pattern.is_match(&t.table_name))
             {
-                let table_button = button(text(&table.table_name)).on_press(
+                let view_button = button(text(&table.table_name)).on_press(
                     <TablesUI as UIComponent>::EventType::message(
                         <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
                             table.table_name.clone(),
                         ),
                     ),
                 );
-                tables_column = tables_column.push(table_button);
+
+                let delete_button = button(text("🗑️ Delete"))
+                    .style(|_, _| delete_button_style())
+                    .on_press(<TablesUI as UIComponent>::EventType::message(
+                        <TablesUI as UIComponent>::EventType::RequestDeleteTable(
+                            table.table_name.clone(),
+                        ),
+                    ));
+
+                let table_row = Row::new().spacing(10).push(view_button).push(delete_button);
+
+                tables_column = tables_column.push(table_row);
             }
 
-            scrollable(tables_column).height(Length::Fill).into()
+            let content = scrollable(tables_column).height(Length::Fill);
+
+            if !self.table_to_delete.is_none() {
+                return self.delete_table_confirmation_modal();
+            }
+
+            content.into()
         } else {
             container(text("Loading")).height(Length::Fill).into()
         }
-    }
-
-    // ======================== SECTION: Create Table ========================
+    } // ======================== SECTION: Create Table ========================
 
     fn create_table_section<'a>(&'a self) -> Element<'a, Message> {
         let mut create_form = Column::new().spacing(20).padding(20);
@@ -393,6 +466,23 @@ fn button_style() -> button::Style {
             radius: Radius::from(5.0),
         },
         text_color: Color::WHITE,
+        shadow: Shadow {
+            color: Color::BLACK,
+            offset: Vector::new(0.0, 3.0),
+            blur_radius: 5.0,
+        },
+    }
+}
+
+fn delete_button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))), // Soft red background
+        border: Border {
+            color: Color::from_rgb(0.6, 0.1, 0.1), // Dark red border
+            width: 2.0,
+            radius: Radius::from(5.0),
+        },
+        text_color: Color::WHITE, // White text for contrast
         shadow: Shadow {
             color: Color::BLACK,
             offset: Vector::new(0.0, 3.0),
