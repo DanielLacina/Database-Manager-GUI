@@ -1,4 +1,4 @@
-use crate::components::ui_components::component::UIComponent;
+use crate::components::ui_components::component::{Event, UIComponent};
 use crate::components::ui_components::console::events::ConsoleMessage;
 use crate::components::ui_components::events::Message;
 use iced::{
@@ -26,6 +26,10 @@ impl UIComponent for Console {
                 self.messages.push(message);
                 Task::none()
             }
+            Self::EventType::ClearMessages => {
+                self.messages = vec![];
+                Task::none()
+            }
         }
     }
 }
@@ -35,17 +39,16 @@ impl Console {
         Self { messages: vec![] }
     }
 
-    pub fn content(&self) -> Scrollable<'_, Message> {
+    pub fn content(&self) -> Column<'_, Message> {
         let mut console_display = Column::new().spacing(10).padding(10);
 
+        // Add each message to the console display
         for message in &self.messages {
-            // Create a `Text` widget with wrapping and styled
             let text_widget = Text::new(message)
                 .size(16)
                 .width(Length::Fill)
-                .color(Color::from_rgb(0.8, 0.8, 0.8)); // Light gray text color
+                .color(Color::from_rgb(0.8, 0.8, 0.8));
 
-            // Add padding and background for each message to make it look like a console
             let message_container = Container::new(text_widget)
                 .padding(10)
                 .width(Length::Fill)
@@ -54,20 +57,26 @@ impl Console {
             console_display = console_display.push(message_container);
         }
 
-        // Wrap the column in a scrollable container with a fixed height
-        scrollable(
+        // Wrap the messages in a scrollable container
+        let scrollable_console = scrollable(
             container(console_display)
                 .style(|_| console_style())
                 .height(Length::Fill)
                 .padding(10),
         )
-        .height(Length::Fill) // Fixed height for the console window
+        .height(Length::Fill)
         .width(400)
-        .style(|_, _| scrollbar_style()) // Apply custom scrollbar style
-    }
-}
+        .style(|_, _| scrollbar_style());
 
-// ======================== STYLES ========================
+        let clear_button = button(Text::new("Clear Messages"))
+            .padding(10)
+            .on_press(ConsoleMessage::message(ConsoleMessage::ClearMessages));
+        Column::new()
+            .spacing(10)
+            .push(scrollable_console)
+            .push(clear_button)
+    }
+} // ======================== STYLES ========================
 
 // Style for the individual console messages
 fn console_message_style() -> container::Style {
