@@ -8,10 +8,12 @@ use crate::components::ui_components::{
     tables::{events::TablesMessage, table_info::TableInfoUI},
 };
 use iced::{
+    alignment,
+    border::Radius,
     widget::{
         button, column, container, row, scrollable, text, text_input, Column, PickList, Row, Text,
     },
-    Alignment, Background, Border, Color, Element, Length, Task, Theme,
+    Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
 use regex::Regex;
 
@@ -155,60 +157,70 @@ impl TablesUI {
             .spacing(20)
             .padding(20);
 
-        // Add sections to the main row
         row = row.push(self.tables_section());
         row = row.push(self.create_table_section());
 
-        // Show single table information if available
+        // Display single table info with an "Undisplay" button
         if let Some(table_info) = &self.single_table_info {
-            row = row.push(self.single_table_info_section(table_info));
+            let mut table_info_section = Column::new().spacing(10).padding(10);
+            table_info_section = table_info_section.push(table_info.content());
+
+            let undisplay_button = button("🔙 Back")
+                .style(|_, _| button_style())
+                .on_press(<TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
+                ))
+                .padding(10);
+
+            table_info_section = table_info_section.push(undisplay_button);
+
+            row = row.push(container(table_info_section).width(Length::Fill));
         }
 
         container(row)
             .height(Length::Fill)
             .width(Length::Fill)
+            .padding(20)
+            .style(|_| container_style())
             .into()
     }
 
-    // ========================
-    // SECTION: Tables Display
-    // ========================
+    // ======================== SECTION: Tables Display ========================
 
-    /// Renders the section for displaying tables and filtering
     fn tables_section<'a>(&'a self) -> Element<'a, Message> {
         let mut tables_display = Column::new().spacing(10).padding(10);
-
-        // Add the tables list and filter input
         tables_display = tables_display.push(self.table_filter_input());
         tables_display = tables_display.push(self.tables_container());
 
-        // Button to show or hide the "Create Table" form
+        let scrollable_section = scrollable(
+            container(tables_display)
+                .padding(10)
+                .style(|_| container_style()),
+        )
+        .height(Length::Fill)
+        .width(Length::Fill);
+
         let toggle_form_button = button(if self.show_create_table_form {
             "Remove create table form"
         } else {
             "Show create table form"
         })
+        .style(|_, _| button_style())
         .on_press(<TablesUI as UIComponent>::EventType::message(
             <TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm,
-        ));
+        ))
+        .padding(10);
 
-        tables_display = tables_display.push(toggle_form_button);
-
-        // Wrap in a scrollable container
-        scrollable(
-            container(tables_display)
-                .padding(10)
-                .style(|_| container::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))),
-                    ..Default::default()
-                }),
-        )
-        .width(400)
-        .height(500)
-        .into()
+        Column::new()
+            .push(scrollable_section)
+            .push(toggle_form_button)
+            .spacing(10)
+            .padding(10)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 
-    /// Creates the search filter input for filtering tables
     fn table_filter_input<'a>(&'a self) -> Element<'a, Message> {
         text_input("Search Tables", &self.table_filter)
             .on_input(|input| {
@@ -216,118 +228,106 @@ impl TablesUI {
                     <TablesUI as UIComponent>::EventType::UpdateTableFilter(input),
                 )
             })
-            .width(300)
+            .width(Length::Fill)
             .padding(10)
+            .style(|_, _| text_input_style())
             .into()
     }
 
-    /// Creates a container to list all tables
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
         if let Some(tables) = &self.tables.tables {
             let mut tables_column = Column::new().spacing(10).padding(10);
             let table_filter_pattern = self.get_table_filter_regex();
 
-            let tables_filtered: Vec<_> = tables
+            for table in tables
                 .iter()
-                .filter(|table| table_filter_pattern.is_match(&table.table_name))
-                .collect();
-
-            for table in tables_filtered {
+                .filter(|t| table_filter_pattern.is_match(&t.table_name))
+            {
                 let table_button = button(text(&table.table_name)).on_press(
                     <TablesUI as UIComponent>::EventType::message(
                         <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
-                            table.table_name.to_string(),
+                            table.table_name.clone(),
                         ),
                     ),
                 );
                 tables_column = tables_column.push(table_button);
             }
 
-            scrollable(container(tables_column).padding(10))
-                .height(300)
-                .width(350)
-                .into()
+            scrollable(tables_column).height(Length::Fill).into()
         } else {
-            container(text("Loading"))
-                .height(300)
-                .width(350)
-                .padding(10)
-                .into()
+            container(text("Loading")).height(Length::Fill).into()
         }
     }
 
-    // ============================
-    // SECTION: Create Table Form
-    // ============================
+    // ======================== SECTION: Create Table ========================
 
-    /// Creates the form section for creating a new table
     fn create_table_section<'a>(&'a self) -> Element<'a, Message> {
-        let mut create_form = Column::new().spacing(10).padding(10);
-
+        let mut create_form = Column::new().spacing(20).padding(20);
         if self.show_create_table_form {
             create_form = create_form.push(self.create_table_form());
         }
 
-        container(create_form).padding(10).into()
+        container(create_form)
+            .padding(20)
+            .style(|_| container_style())
+            .into()
     }
 
-    /// Creates the form to create a new table
     fn create_table_form<'a>(&'a self) -> Element<'a, Message> {
-        let mut form = Column::new().spacing(10).padding(10);
-
+        let mut form = Column::new().spacing(15).padding(15);
         form = form.push(self.table_name_input());
         form = form.push(self.table_form_columns());
 
-        let add_column_button = button("Add Column")
+        let add_column_button = button("➕ Add Column")
+            .style(|_, _| button_style())
             .on_press(<TablesUI as UIComponent>::EventType::message(
                 <TablesUI as UIComponent>::EventType::AddColumn,
             ))
             .padding(10);
+        form = form.push(add_column_button);
 
-        let create_table_button = button("Create table")
+        let create_table_button = button("🛠️ Create Table")
+            .style(|_, _| create_button_style())
             .on_press(<TablesUI as UIComponent>::EventType::message(
                 <TablesUI as UIComponent>::EventType::SubmitCreateTable(
                     self.create_table_input.clone(),
                 ),
             ))
-            .padding(10);
+            .padding(15);
 
-        form = form.push(add_column_button);
-        form = form.push(row![create_table_button]);
-
-        container(form)
-            .padding(10)
-            .style(|_| container::Style {
-                background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))),
-                ..Default::default()
-            })
-            .into()
+        form.push(
+            Row::new()
+                .push(
+                    container(create_table_button)
+                        .width(Length::Fill)
+                        .align_x(alignment::Horizontal::Center), // Center the button horizontally
+                )
+                .width(Length::Fill),
+        )
+        .into()
     }
 
-    /// Creates the input field for the table name
     fn table_name_input<'a>(&'a self) -> Element<'a, Message> {
-        text_input("Table Name", &self.create_table_input.table_name)
+        text_input("Enter Table Name", &self.create_table_input.table_name)
             .on_input(|value| {
                 <TablesUI as UIComponent>::EventType::message(
                     <TablesUI as UIComponent>::EventType::UpdateTableName(value),
                 )
             })
-            .width(350)
+            .width(Length::Fill)
             .padding(10)
+            .style(|_, _| text_input_style())
             .into()
     }
 
     fn table_form_columns<'a>(&'a self) -> Element<'a, Message> {
-        let mut columns = Column::new();
-
+        let mut columns_list = Column::new().spacing(10);
         for (index, column) in self.create_table_input.columns.iter().enumerate() {
-            columns = columns.push(self.column_input_row(index, column));
+            columns_list = columns_list.push(self.column_input_row(index, column));
         }
-
-        scrollable(columns).height(500).into()
+        scrollable(columns_list).height(Length::Fill).into()
     }
 
-    /// Creates a row of inputs for a column
     fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
         let name_input = text_input("Column Name", &column.name)
             .on_input(move |value| {
@@ -335,7 +335,8 @@ impl TablesUI {
                     <TablesUI as UIComponent>::EventType::UpdateColumnName(index, value),
                 )
             })
-            .width(200);
+            .width(Length::FillPortion(2))
+            .style(|_, _| text_input_style());
 
         let datatype_input = PickList::new(
             vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
@@ -346,40 +347,88 @@ impl TablesUI {
                 )
             },
         )
-        .placeholder("Data Type")
-        .width(150);
+        .width(Length::FillPortion(1));
 
-        let remove_button = button("Remove")
+        let remove_button = button("🗑️ Remove")
+            .style(|_, _| button_style())
             .on_press(<TablesUI as UIComponent>::EventType::message(
                 <TablesUI as UIComponent>::EventType::RemoveColumn(index),
             ))
-            .padding(5);
+            .padding(10);
 
         row![name_input, datatype_input, remove_button]
             .spacing(10)
-            .padding(2)
             .into()
     }
 
-    // ============================
-    // SECTION: Utility Functions
-    // ============================
-
     fn get_table_filter_regex(&self) -> Regex {
-        Regex::new(&format!(r"(?i){}", &self.table_filter))
-            .unwrap_or_else(|_| Regex::new(r"").unwrap())
+        Regex::new(&format!(r"(?i){}", self.table_filter))
+            .unwrap_or_else(|_| Regex::new("").unwrap())
     }
+}
 
-    /// Displays information for a single table
-    fn single_table_info_section<'a>(
-        &'a self,
-        table_info: &'a TableInfoUI,
-    ) -> Element<'a, Message> {
-        let undisplay_button =
-            button("Undisplay").on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
-            ));
+// ======================== STYLES ========================
+fn container_style() -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.1, 0.1, 0.1))), // Background color
+        border: Border {
+            color: Color::TRANSPARENT,
+            width: 1.5,
+            radius: Radius::from(5.0),
+        },
+        text_color: Some(Color::WHITE), // Text color for the content inside the container
+        shadow: Shadow {
+            color: Color::BLACK,
+            offset: Vector::new(0.0, 2.0),
+            blur_radius: 5.0,
+        },
+    }
+}
+fn button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.0, 0.75, 0.65))),
+        border: Border {
+            color: Color::from_rgb(0.0, 0.6, 0.5),
+            width: 2.0,
+            radius: Radius::from(5.0),
+        },
+        text_color: Color::WHITE,
+        shadow: Shadow {
+            color: Color::BLACK,
+            offset: Vector::new(0.0, 3.0),
+            blur_radius: 5.0,
+        },
+    }
+}
 
-        column![table_info.content(), undisplay_button].into()
+fn create_button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.0, 0.5, 0.9))),
+        border: Border {
+            color: Color::from_rgb(0.0, 0.4, 0.7),
+            width: 2.0,
+            radius: Radius::from(8.0),
+        },
+        text_color: Color::WHITE,
+        shadow: Shadow {
+            color: Color::BLACK,
+            offset: Vector::new(0.0, 3.0),
+            blur_radius: 7.0,
+        },
+    }
+}
+
+fn text_input_style() -> text_input::Style {
+    text_input::Style {
+        background: Background::Color(Color::from_rgb(0.2, 0.2, 0.2)), // Darker input background
+        border: Border {
+            width: 1.5,
+            color: Color::from_rgb(0.0, 0.74, 0.84),
+            radius: Radius::from(5.0),
+        },
+        placeholder: Color::from_rgb(0.6, 0.6, 0.6), // Color for placeholder text
+        value: Color::WHITE,                         // Color for input text
+        selection: Color::from_rgb(0.0, 0.74, 0.84), // Color for selected text
+        icon: Color::from_rgb(0.8, 0.8, 0.8),        // Color for any input icons
     }
 }
