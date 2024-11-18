@@ -37,6 +37,11 @@ impl Tables {
         self.repository.create_table(&table_in).await;
         self.tables = Some(self.repository.get_tables().await.unwrap());
     }
+
+    pub async fn delete_table(&mut self, table_name: String) {
+        self.repository.delete_table(&table_name).await;
+        self.tables = Some(self.repository.get_tables().await.unwrap());
+    }
 }
 
 #[cfg(test)]
@@ -44,33 +49,53 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    async fn tables_business_component(pool: PgPool) -> Tables {
+    async fn tables_component(pool: PgPool, table_in: &BTableIn) -> Tables {
         let repository = BRepository::new(Some(pool)).await;
+        repository.create_table(table_in).await;
         Tables::new(repository.into())
     }
 
-    #[sqlx::test]
-    async fn test_initialize_tables_component_component(pool: PgPool) {
-        sqlx::query!("CREATE TABLE users (name TEXT)")
-            .execute(&pool)
-            .await
-            .unwrap();
-        let mut tables_component = tables_business_component(pool).await;
+    /// Helper function to initialize the `Tables` component.
+    async fn initialized_tables_component(pool: PgPool, table_in: &BTableIn) -> Tables {
+        let mut tables_component = tables_component(pool, table_in).await;
         tables_component.initialize_component().await;
-        let expected_tables = vec![BTable {
+        tables_component
+    }
+
+    fn default_table_in() -> BTableIn {
+        BTableIn {
             table_name: String::from("users"),
+            columns: vec![BColumn {
+                name: String::from("name"),
+                datatype: BDataType::TEXT,
+            }],
+        }
+    }
+
+    #[sqlx::test]
+    async fn test_initialize_tables_component(pool: PgPool) {
+        let table_in = default_table_in();
+
+        // Initialize the tables component
+        let mut tables = initialized_tables_component(pool, &table_in).await;
+
+        // Expected result
+        let expected_tables = vec![BTable {
+            table_name: table_in.table_name,
         }];
 
-        assert_eq!(tables_component.tables, Some(expected_tables));
+        // Assert that the initialized component matches the expected output
+        assert_eq!(tables.tables, Some(expected_tables));
     }
 
     #[sqlx::test]
     async fn test_add_table(pool: PgPool) {
-        let mut tables_component = tables_business_component(pool).await;
-        tables_component.initialize_component().await;
-        tables_component
+        let table_in = default_table_in();
+        let mut tables = initialized_tables_component(pool, &table_in).await;
+        let create_table_name = String::from("account");
+        tables
             .add_table(BTableIn {
-                table_name: String::from("users"),
+                table_name: create_table_name.clone(),
                 columns: vec![
                     BColumn {
                         name: String::from("username"),
@@ -91,10 +116,30 @@ mod tests {
                 ],
             })
             .await;
-        let expected_tables = vec![BTable {
-            table_name: String::from("users"),
-        }];
+        let mut expected_tables = vec![
+            BTable {
+                table_name: table_in.table_name,
+            },
+            BTable {
+                table_name: create_table_name,
+            },
+        ];
+        expected_tables.sort_by(|a, b| b.table_name.cmp(&a.table_name));
+        tables
+            .tables
+            .as_mut()
+            .unwrap()
+            .sort_by(|a, b| b.table_name.cmp(&a.table_name));
 
-        assert_eq!(tables_component.tables, Some(expected_tables));
+        assert_eq!(tables.tables, Some(expected_tables));
+    }
+
+    #[sqlx::test]
+    async fn test_delete_table(pool: PgPool) {
+        let table_in = default_table_in();
+        let mut tables = initialized_tables_component(pool, &table_in).await;
+        tables.delete_table(table_in.table_name).await;
+        let mut expected_tables = vec![];
+        assert_eq!(tables.tables, Some(expected_tables));
     }
 }

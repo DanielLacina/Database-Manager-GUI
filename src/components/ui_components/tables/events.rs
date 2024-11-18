@@ -21,6 +21,9 @@ pub enum TablesMessage {
     SingleTableInfo(TableInfoMessage),
     InitializeComponent,
     ComponentInitialized(BusinessTables),
+    RequestDeleteTable(String),
+    ConfirmDeleteTable,
+    CancelDeleteTable,
 }
 
 impl Event for TablesMessage {

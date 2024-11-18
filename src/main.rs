@@ -35,11 +35,7 @@ impl Crm {
                     let mut display = Row::new();
 
                     // Add the main content
-                    display = display.push(
-                        Column::new()
-                            .push(components.home_ui.content())
-                            .push(components.tables_ui.content()),
-                    );
+                    display = display.push(Column::new().push(components.tables_ui.content()));
 
                     // Add the "Show Console" button
                     display = display.push(
