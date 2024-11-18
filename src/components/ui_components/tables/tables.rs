@@ -146,6 +146,11 @@ impl UIComponent for TablesUI {
             }
             Self::EventType::ConfirmDeleteTable => {
                 if let Some(table_to_delete) = self.table_to_delete.clone() {
+                    if let Some(single_table_info) = &self.single_table_info {
+                        if single_table_info.get_table_name() == table_to_delete {
+                            self.single_table_info = None;
+                        }
+                    }
                     self.table_to_delete = None;
                     let mut tables = self.tables.clone();
 
