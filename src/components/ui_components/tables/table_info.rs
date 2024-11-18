@@ -127,6 +127,10 @@ impl TableInfoUI {
         }
     }
 
+    pub fn get_table_name(&self) -> String {
+        self.table_info.table_name.clone()
+    }
+
     fn formated_table_change_events(&self) -> String {
         format!("{:?}", self.table_info.get_table_change_events())
     }
