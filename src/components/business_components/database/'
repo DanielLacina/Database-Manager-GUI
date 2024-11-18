@@ -1,7 +1,7 @@
 use crate::components::business_components::database::{
     database::create_database_pool,
     models::{ColumnsInfo, Table},
-    schemas::{Constraint, TableChangeEvents, TableIn},
+    schemas::{TableChangeEvents, TableIn},
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 
@@ -53,21 +53,7 @@ WHERE table_name = '{}'",
         let columns_query_list = table_in
             .columns
             .iter()
-            .map(|column| {
-                let mut column_configuration = vec![format!("{} {}", &column.name, &column.datatype.to_string())];
-                for constraint in column.constraints.iter() {
-                   match constraint {
-                      Constraint::ForeignKey(referenced_table, referenced_column) => {
-                          column_configuration.push(format!("REFERENCES \"{}\"(\"{}\")", referenced_table, referenced_column)); 
-                      }
-                      Constraint::PrimaryKey => {
-                         column_configuration.push(String::from("PRIMARY KEY"));
-                      }
-                   }
-                }
-                column_configuration.join(" ") 
-            }
-            )
+            .map(|column| format!("{} {}", &column.name, &column.datatype.to_string()))
             .collect::<Vec<_>>();
         let columns_query_joined = format!("({})", columns_query_list.join(", "));
         sqlx::query(&format!(
@@ -140,7 +126,7 @@ WHERE table_name = '{}'",
 
                 TableChangeEvents::AddPrimaryKey(column_name) => {
                      format!(
-                        "ALTER TABLE \"{}\" ADD PRIMARY KEY (\"{}\")",
+                        "ALTER TABLE \"{}\" ADD CONSTRAINT FOREGIN KEY(\"{}\") REFERENCES \"{}\"(\"{}\")",
                          current_table_name, column_name )
  
                 }

@@ -34,10 +34,17 @@ impl DataType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Constraint {
+    ForeignKey(String, String),
+    PrimaryKey,
+}
+
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Column {
     pub name: String,
     pub datatype: DataType,
+    pub constraints: Vec<Constraint>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq)]
@@ -53,4 +60,6 @@ pub enum TableChangeEvents {
     ChangeColumnName(String, String),
     AddColumn(String, DataType),
     RemoveColumn(String),
+    AddForeignKey(String, String, String),
+    AddPrimaryKey(String),
 }
