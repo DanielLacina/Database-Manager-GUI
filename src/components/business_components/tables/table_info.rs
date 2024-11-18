@@ -38,14 +38,11 @@ impl TableInfo {
             .get_columns_info(&self.table_name)
             .await
             .unwrap();
-        let columns_info_with_enum_datatype = columns_info
+        let columns_info_with_enums = columns_info
             .into_iter()
-            .map(|column| BColumn {
-                name: column.column_name,
-                datatype: BDataType::to_datatype(column.data_type),
-            })
+            .map(|column_info| BColumn::to_column(column_info))
             .collect();
-        self.columns_info = columns_info_with_enum_datatype;
+        self.columns_info = columns_info_with_enums;
     }
 
     pub fn add_table_change_event(&mut self, table_change_event: BTableChangeEvents) {
@@ -65,6 +62,9 @@ impl TableInfo {
             BTableChangeEvents::AddColumn(column_name, data_type) => {
                 self.handle_add_column(column_name, data_type);
             }
+            BTableChangeEvents::AddForeignKey(column_name, referenced_table, referenced_column) => {
+            }
+            BTableChangeEvents::AddPrimaryKey(column_name) => {}
         }
         println!("{:?}", self.table_change_events);
     }

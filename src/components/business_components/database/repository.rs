@@ -37,12 +37,34 @@ impl Repository {
         &self,
         table_name: &str,
     ) -> Result<Vec<ColumnsInfo>, Box<sqlx::Error>> {
-        let res = sqlx::query_as::<_, ColumnsInfo>(&format!(
-            "SELECT column_name, data_type
-FROM information_schema.columns
-WHERE table_name = '{}'",
-            table_name
-        ))
+        let res = sqlx::query_as::<_, ColumnsInfo>(
+                        "SELECT
+                        c.column_name,
+                        c.data_type,
+                        ARRAY_AGG(tc.constraint_type::TEXT) AS constraint_types,
+                        ARRAY_AGG(ccu.table_name::TEXT) AS referenced_tables,
+                        ARRAY_AGG(ccu.column_name::TEXT) AS referenced_columns
+                    FROM
+                        information_schema.columns AS c
+                    LEFT JOIN
+                        information_schema.key_column_usage AS kcu
+                        ON c.table_name = kcu.table_name
+                        AND c.column_name = kcu.column_name
+                    LEFT JOIN
+                        information_schema.table_constraints AS tc
+                        ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_name = c.table_name
+                    LEFT JOIN
+                        information_schema.referential_constraints AS rc
+                        ON rc.constraint_name = tc.constraint_name
+                    LEFT JOIN
+                        information_schema.constraint_column_usage AS ccu
+                        ON ccu.constraint_name = rc.unique_constraint_name
+                    WHERE
+                        c.table_name = $1 
+                    GROUP BY c.column_name, c.data_type",
+        )
+        .bind(&table_name)
         .fetch_all(&self.pool)
         .await
         .unwrap();
