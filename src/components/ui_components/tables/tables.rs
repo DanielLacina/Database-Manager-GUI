@@ -9,6 +9,7 @@ use crate::components::ui_components::{
 };
 use iced::{
     alignment,
+    alignment::Vertical,
     border::Radius,
     widget::{
         button, column, container, row, scrollable, text, text_input, Button, Column, PickList,
@@ -264,8 +265,29 @@ impl TablesUI {
             .style(|_, _| text_input_style())
             .into()
     }
+    fn delete_table_styled_confirmation_text<'a>(&'a self) -> Element<'a, Message> {
+        let message_prefix = Text::new("Are you sure you want to delete the table ")
+            .size(20)
+            .color(Color::from_rgb(0.9, 0.9, 0.9)); // Light grey color for the main text
 
-    fn delete_table_confirmation_modal<'a>(&self) -> Element<'a, Message> {
+        let highlighted_table_name = text(self.table_to_delete.as_ref().unwrap())
+            .size(22)
+            .color(Color::from_rgb(1.0, 0.4, 0.4)); // Emphasized red color for the table name
+
+        let message_suffix = Text::new("?")
+            .size(20)
+            .color(Color::from_rgb(0.9, 0.9, 0.9));
+
+        // Combine the styled texts into a row
+        Row::new()
+            .push(message_prefix)
+            .push(highlighted_table_name)
+            .push(message_suffix)
+            .align_y(Vertical::Center)
+            .wrap()
+            .into()
+    }
+    fn delete_table_confirmation_modal<'a>(&'a self) -> Element<'a, Message> {
         let confirm_button = Button::new(text("Yes, delete"))
             .on_press(<TablesUI as UIComponent>::EventType::message(
                 <TablesUI as UIComponent>::EventType::ConfirmDeleteTable,
@@ -277,18 +299,19 @@ impl TablesUI {
                 <TablesUI as UIComponent>::EventType::CancelDeleteTable,
             ));
 
-        let modal_content = Column::new()
-            .spacing(20)
-            .push(Text::new(format!(
-                "Are you sure you want to delete the table {}?",
-                self.table_to_delete.clone().unwrap()
-            )))
-            .push(
-                Row::new()
-                    .spacing(10)
-                    .push(confirm_button)
-                    .push(cancel_button),
-            );
+        let modal_content = container(
+            Column::new()
+                .spacing(20)
+                .push(self.delete_table_styled_confirmation_text())
+                .push(
+                    Row::new()
+                        .spacing(10)
+                        .push(confirm_button)
+                        .push(cancel_button),
+                ),
+        )
+        .padding(20)
+        .style(|_| delete_table_confirmation_modal_style());
 
         container(modal_content).padding(20).into()
     }
@@ -520,5 +543,29 @@ fn text_input_style() -> text_input::Style {
         value: Color::WHITE,                         // Color for input text
         selection: Color::from_rgb(0.0, 0.74, 0.84), // Color for selected text
         icon: Color::from_rgb(0.8, 0.8, 0.8),        // Color for any input icons
+    }
+}
+
+fn delete_table_confirmation_modal_style() -> container::Style {
+    container::Style {
+        // Semi-transparent dark background
+        background: Some(Background::Color(Color::from_rgba(0.05, 0.05, 0.05, 0.95))),
+
+        // Softer border with a slightly transparent white color
+        border: Border {
+            color: Color::from_rgba(1.0, 1.0, 1.0, 0.3),
+            width: 1.0,
+            radius: Radius::from(12.0),
+        },
+
+        // White text color for readability
+        text_color: Some(Color::WHITE),
+
+        // Softer shadow for a subtle floating effect
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.7),
+            offset: Vector::new(0.0, 5.0),
+            blur_radius: 15.0,
+        },
     }
 }
