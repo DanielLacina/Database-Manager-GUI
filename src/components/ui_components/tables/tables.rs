@@ -48,25 +48,21 @@ impl UIComponent for TablesUI {
                     .update(CreateTableFormMessage::ShowOrRemoveCreateTableForm)
             }
             Self::EventType::CreateTableForm(create_table_form_message) => {
-                match create_table_form_message {
-                    CreateTableFormMessage::SubmitCreateTable(ref create_table_input) => {
-                        let task_result = self
-                            .create_table_form
-                            .update(create_table_form_message.clone());
-                        let mut tables = self.tables.clone();
+                match &create_table_form_message {
+                    CreateTableFormMessage::SubmitCreateTable(create_table_input) => {
                         let create_table_input = create_table_input.clone();
+                        let task_result = self.create_table_form.update(create_table_form_message);
+                        let mut tables = self.tables.clone();
                         task_result.chain(Task::perform(
                             async move {
+                                let table_name = create_table_input.table_name.clone();
                                 tables.add_table(create_table_input).await;
-                                (tables, create_table_input.table_name)
+                                (tables, table_name)
                             },
                             |table_tuple| {
-                                let (tables, ref table_name) = table_tuple;
+                                let (tables, table_name) = table_tuple;
                                 Self::EventType::message(Self::EventType::CreateTableForm(
-                                    CreateTableFormMessage::TableCreated(
-                                        tables,
-                                        table_name.clone(),
-                                    ),
+                                    CreateTableFormMessage::TableCreated(tables, table_name),
                                 ))
                             },
                         ))
@@ -76,9 +72,9 @@ impl UIComponent for TablesUI {
                             .create_table_form
                             .update(create_table_form_message.clone());
                         self.show_create_table_form = false;
-                        self.tables = tables;
+                        self.tables = tables.clone();
                         task_result.chain(Task::done(Self::EventType::message(
-                            Self::EventType::GetSingleTableInfo(table_name),
+                            Self::EventType::GetSingleTableInfo(table_name.clone()),
                         )))
                     }
                     _ => self.create_table_form.update(create_table_form_message),
