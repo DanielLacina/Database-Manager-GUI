@@ -72,33 +72,59 @@ impl Repository {
     }
 
     pub async fn create_table(&self, table_in: &TableIn) {
-        let columns_query_list = table_in
+        let mut primary_key_columns = vec![];
+
+        let columns_query_list: Vec<String> = table_in
             .columns
             .iter()
             .map(|column| {
-                let mut column_configuration = vec![format!("{} {}", &column.name, &column.datatype.to_string())];
-                for constraint in column.constraints.iter() {
-                   match constraint {
-                      Constraint::ForeignKey(referenced_table, referenced_column) => {
-                          column_configuration.push(format!("REFERENCES \"{}\"(\"{}\")", referenced_table, referenced_column)); 
-                      }
-                      Constraint::PrimaryKey => {
-                         column_configuration.push(String::from("PRIMARY KEY"));
-                      }
-                   }
+                let mut column_configuration = vec![format!("\"{}\" {}", column.name, column.datatype)];
+                for constraint in &column.constraints {
+                    match constraint {
+                        Constraint::ForeignKey(referenced_table, referenced_column) => {
+                            column_configuration.push(format!(
+                                "REFERENCES \"{}\"(\"{}\")",
+                                referenced_table, referenced_column
+                            ));
+                        }
+                        Constraint::PrimaryKey => {
+                            primary_key_columns.push(column.name.clone());
+                        }
+                    }
                 }
-                column_configuration.join(" ") 
-            }
-            )
-            .collect::<Vec<_>>();
-        let columns_query_joined = format!("({})", columns_query_list.join(", "));
-        sqlx::query(&format!(
-            "CREATE TABLE {} {}",
-            &table_in.table_name, &columns_query_joined
-        ))
-        .execute(&self.pool)
-        .await
-        .unwrap();
+                column_configuration.join(" ")
+            })
+            .collect();
+
+        // If there are primary keys, append the PRIMARY KEY constraint
+        let mut full_query_list = columns_query_list.clone();
+        if !primary_key_columns.is_empty() {
+            full_query_list.push(format!(
+                "PRIMARY KEY ({})",
+                primary_key_columns
+                    .iter()
+                    .map(|col| format!("\"{}\"", col))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+
+        let columns_query_joined = format!("({})", full_query_list.join(", "));
+
+        // Construct the full SQL query
+        let query = format!(
+            "CREATE TABLE \"{}\" {}",
+            table_in.table_name, columns_query_joined
+        );
+
+        // Print the query for debugging
+        println!("Generated Query: {}", query);
+
+        // Execute the query
+        sqlx::query(&query)
+            .execute(&self.pool)
+            .await
+            .unwrap();
     }
 
     pub async fn delete_table(&self, table_name: &str) {

@@ -56,14 +56,12 @@ impl fmt::Display for Constraint {
 impl Constraint {
     pub fn to_constraint(
         constraint_type: String,
-        referenced_table: Option<String>,
-        referenced_column: Option<String>,
+        referenced_table: String,
+        referenced_column: String,
     ) -> Self {
         match constraint_type.as_str() {
             "PRIMARY KEY" => Self::PrimaryKey,
-            "FOREIGN KEY" => {
-                Self::ForeignKey(referenced_table.unwrap(), referenced_column.unwrap())
-            }
+            "FOREIGN KEY" => Self::ForeignKey(referenced_table, referenced_column),
             _ => panic!("Invalid Constraint"),
         }
     }
@@ -78,6 +76,8 @@ pub struct Column {
 
 impl Column {
     pub fn to_column(column_info: ColumnsInfo) -> Self {
+        // initial query couldve returned null constraint types so they
+        // need to be filtered
         Self {
             name: column_info.column_name,
             datatype: DataType::to_datatype(column_info.data_type),
@@ -85,8 +85,15 @@ impl Column {
                 zip(column_info.constraint_types, column_info.referenced_tables),
                 column_info.referenced_columns,
             )
+            .filter(|((constraint_type, referenced_table), referenced_column)| {
+                !constraint_type.is_none()
+            })
             .map(|((constraint_type, referenced_table), referenced_column)| {
-                Constraint::to_constraint(constraint_type, referenced_table, referenced_column)
+                Constraint::to_constraint(
+                    constraint_type.unwrap(),
+                    referenced_table.unwrap_or_default(),
+                    referenced_column.unwrap_or_default(),
+                )
             })
             .collect(),
         }

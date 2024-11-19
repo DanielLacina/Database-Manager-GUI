@@ -1,19 +1,23 @@
 use crate::components::business_components::{
-    component::{BColumn, BDataType, BTable, BTableIn, BusinessComponent},
+    component::{BColumn, BConstraint, BDataType, BTable, BTableIn, BusinessComponent},
     components::BusinessTables,
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    tables::{events::TablesMessage, table_info::TableInfoUI},
+    tables::{
+        create_table_form::CreateTableFormUI,
+        events::{CreateTableFormMessage, TableInfoMessage, TablesMessage},
+        table_info::TableInfoUI,
+    },
 };
 use iced::{
     alignment,
     alignment::Vertical,
     border::Radius,
     widget::{
-        button, column, container, row, scrollable, text, text_input, Button, Column, PickList,
-        Row, Text,
+        button, checkbox, column, container, row, scrollable, text, text_input, Button, Checkbox,
+        Column, PickList, Row, Text,
     },
     Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
@@ -23,7 +27,7 @@ use regex::Regex;
 pub struct TablesUI {
     pub table_filter: String,
     pub show_create_table_form: bool,
-    pub create_table_input: BTableIn,
+    pub create_table_form: CreateTableFormUI,
     pub tables: BusinessTables,
     pub single_table_info: Option<TableInfoUI>,
     pub table_to_delete: Option<String>,
@@ -39,60 +43,46 @@ impl UIComponent for TablesUI {
                 Task::none()
             }
             Self::EventType::ShowOrRemoveCreateTableForm => {
-                if self.create_table_input.columns.len() == 0 {
-                    for _ in 0..1 {
-                        self.create_table_input.columns.push(BColumn::default());
-                    }
-                }
                 self.show_create_table_form = !self.show_create_table_form;
-                Task::none()
+                self.create_table_form
+                    .update(CreateTableFormMessage::ShowOrRemoveCreateTableForm)
             }
-            Self::EventType::AddColumn => {
-                self.create_table_input.columns.push(BColumn::default());
-                Task::none()
-            }
-            Self::EventType::RemoveColumn(index) => {
-                if index < self.create_table_input.columns.len() {
-                    self.create_table_input.columns.remove(index);
+            Self::EventType::CreateTableForm(create_table_form_message) => {
+                match create_table_form_message {
+                    CreateTableFormMessage::SubmitCreateTable(ref create_table_input) => {
+                        let task_result = self
+                            .create_table_form
+                            .update(create_table_form_message.clone());
+                        let mut tables = self.tables.clone();
+                        let create_table_input = create_table_input.clone();
+                        task_result.chain(Task::perform(
+                            async move {
+                                tables.add_table(create_table_input).await;
+                                (tables, create_table_input.table_name)
+                            },
+                            |table_tuple| {
+                                let (tables, ref table_name) = table_tuple;
+                                Self::EventType::message(Self::EventType::CreateTableForm(
+                                    CreateTableFormMessage::TableCreated(
+                                        tables,
+                                        table_name.clone(),
+                                    ),
+                                ))
+                            },
+                        ))
+                    }
+                    CreateTableFormMessage::TableCreated(tables, table_name) => {
+                        let task_result = self
+                            .create_table_form
+                            .update(create_table_form_message.clone());
+                        self.show_create_table_form = false;
+                        self.tables = tables;
+                        task_result.chain(Task::done(Self::EventType::message(
+                            Self::EventType::GetSingleTableInfo(table_name),
+                        )))
+                    }
+                    _ => self.create_table_form.update(create_table_form_message),
                 }
-                Task::none()
-            }
-            Self::EventType::UpdateColumnName(index, input) => {
-                if let Some(column) = self.create_table_input.columns.get_mut(index) {
-                    column.name = input;
-                }
-                Task::none()
-            }
-            Self::EventType::UpdateColumnType(index, input) => {
-                if let Some(column) = self.create_table_input.columns.get_mut(index) {
-                    column.datatype = input;
-                }
-                Task::none()
-            }
-            Self::EventType::UpdateTableName(input) => {
-                self.create_table_input.table_name = input;
-                Task::none()
-            }
-            Self::EventType::TableCreated(tables, table_name) => {
-                self.show_create_table_form = false;
-                self.create_table_input = BTableIn::default();
-                self.tables = tables;
-                Task::done(Self::EventType::message(
-                    Self::EventType::GetSingleTableInfo(table_name),
-                ))
-            }
-            Self::EventType::SubmitCreateTable(create_table_input) => {
-                let mut tables = self.tables.clone();
-                Task::perform(
-                    async move {
-                        tables.add_table(create_table_input.clone()).await;
-                        (tables, create_table_input.table_name)
-                    },
-                    |table_tuple| {
-                        let (tables, table_name) = table_tuple;
-                        Self::EventType::message(Self::EventType::TableCreated(tables, table_name))
-                    },
-                )
             }
             Self::EventType::GetSingleTableInfo(table_name) => {
                 let mut tables = self.tables.clone();
@@ -119,11 +109,20 @@ impl UIComponent for TablesUI {
             }
             Self::EventType::SingleTableInfo(table_info_message) => {
                 if let Some(table_info) = &mut self.single_table_info {
-                    table_info.update(table_info_message)
+                    match table_info_message {
+                        TableInfoMessage::SubmitUpdateTable => {
+                            let result_message = table_info.update(table_info_message);
+                            result_message.chain(Task::done(Self::EventType::message(
+                                Self::EventType::UpdateTables,
+                            )))
+                        }
+                        _ => table_info.update(table_info_message),
+                    }
                 } else {
                     Task::none()
                 }
             }
+
             Self::EventType::RequestDeleteTable(table_name) => {
                 self.table_to_delete = Some(table_name);
                 Task::none()
@@ -171,6 +170,20 @@ impl UIComponent for TablesUI {
                 self.table_to_delete = None;
                 Task::none()
             }
+            Self::EventType::UpdateTables => {
+                let mut tables = self.tables.clone();
+                Task::perform(
+                    async move {
+                        tables.update_tables().await;
+                        tables
+                    },
+                    |tables| Self::EventType::message(Self::EventType::SetTables(tables)),
+                )
+            }
+            Self::EventType::SetTables(tables) => {
+                self.tables = tables;
+                Task::none()
+            }
         }
     }
 }
@@ -180,7 +193,7 @@ impl TablesUI {
         Self {
             table_filter: String::default(),
             show_create_table_form: false,
-            create_table_input: BTableIn::default(),
+            create_table_form: CreateTableFormUI::new(),
             tables,
             single_table_info: None,
             table_to_delete: None,
@@ -195,7 +208,9 @@ impl TablesUI {
             .padding(20);
 
         row = row.push(self.tables_section());
-        row = row.push(self.create_table_section());
+        if self.show_create_table_form {
+            row = row.push(self.create_table_form.content());
+        }
 
         // Display single table info with an "Undisplay" button
         if let Some(table_info) = &self.single_table_info {
@@ -361,106 +376,6 @@ impl TablesUI {
             container(text("Loading")).height(Length::Fill).into()
         }
     } // ======================== SECTION: Create Table ========================
-
-    fn create_table_section<'a>(&'a self) -> Element<'a, Message> {
-        let mut create_form = Column::new().spacing(20).padding(20);
-        if self.show_create_table_form {
-            create_form = create_form.push(self.create_table_form());
-        }
-
-        container(create_form)
-            .padding(20)
-            .style(|_| container_style())
-            .into()
-    }
-
-    fn create_table_form<'a>(&'a self) -> Element<'a, Message> {
-        let mut form = Column::new().spacing(15).padding(15);
-        form = form.push(self.table_name_input());
-        form = form.push(self.table_form_columns());
-
-        let add_column_button = button("➕ Add Column")
-            .style(|_, _| button_style())
-            .on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::AddColumn,
-            ))
-            .padding(10);
-        form = form.push(add_column_button);
-
-        let create_table_button = button("🛠️ Create Table")
-            .style(|_, _| create_button_style())
-            .on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::SubmitCreateTable(
-                    self.create_table_input.clone(),
-                ),
-            ))
-            .padding(15);
-
-        form.push(
-            Row::new()
-                .push(
-                    container(create_table_button)
-                        .width(Length::Fill)
-                        .align_x(alignment::Horizontal::Center), // Center the button horizontally
-                )
-                .width(Length::Fill),
-        )
-        .into()
-    }
-
-    fn table_name_input<'a>(&'a self) -> Element<'a, Message> {
-        text_input("Enter Table Name", &self.create_table_input.table_name)
-            .on_input(|value| {
-                <TablesUI as UIComponent>::EventType::message(
-                    <TablesUI as UIComponent>::EventType::UpdateTableName(value),
-                )
-            })
-            .width(Length::Fill)
-            .padding(10)
-            .style(|_, _| text_input_style())
-            .into()
-    }
-
-    fn table_form_columns<'a>(&'a self) -> Element<'a, Message> {
-        let mut columns_list = Column::new().spacing(10);
-        for (index, column) in self.create_table_input.columns.iter().enumerate() {
-            columns_list = columns_list.push(self.column_input_row(index, column));
-        }
-        scrollable(columns_list).height(Length::Fill).into()
-    }
-
-    fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
-        let name_input = text_input("Column Name", &column.name)
-            .on_input(move |value| {
-                <TablesUI as UIComponent>::EventType::message(
-                    <TablesUI as UIComponent>::EventType::UpdateColumnName(index, value),
-                )
-            })
-            .width(Length::FillPortion(2))
-            .style(|_, _| text_input_style());
-
-        let datatype_input = PickList::new(
-            vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
-            Some(&column.datatype),
-            move |value| {
-                <TablesUI as UIComponent>::EventType::message(
-                    <TablesUI as UIComponent>::EventType::UpdateColumnType(index, value),
-                )
-            },
-        )
-        .width(Length::FillPortion(1));
-
-        let remove_button = button("🗑️ Remove")
-            .style(|_, _| button_style())
-            .on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::RemoveColumn(index),
-            ))
-            .padding(10);
-
-        row![name_input, datatype_input, remove_button]
-            .spacing(10)
-            .into()
-    }
 
     fn get_table_filter_regex(&self) -> Regex {
         Regex::new(&format!(r"(?i){}", self.table_filter))
