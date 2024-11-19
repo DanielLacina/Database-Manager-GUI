@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BColumnsInfo, BDataType, BTable, BTableChangeEvents,
-    BTableIn, BTableInfo, BusinessComponent,
+    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
+    BTableChangeEvents, BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::tables::table_info::TableInfo;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ pub struct Tables {
 
 impl BusinessComponent for Tables {
     async fn initialize_component(&mut self) {
-        self.tables = Some(self.repository.get_tables().await.unwrap());
+        self.update_tables().await;
     }
 }
 
@@ -35,6 +35,10 @@ impl Tables {
 
     pub async fn add_table(&mut self, table_in: BTableIn) {
         self.repository.create_table(&table_in).await;
+        self.tables = Some(self.repository.get_tables().await.unwrap());
+    }
+
+    pub async fn update_tables(&mut self) {
         self.tables = Some(self.repository.get_tables().await.unwrap());
     }
 
@@ -68,6 +72,7 @@ mod tests {
             columns: vec![BColumn {
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
+                constraints: vec![BConstraint::PrimaryKey],
             }],
         }
     }
@@ -92,36 +97,46 @@ mod tests {
     async fn test_add_table(pool: PgPool) {
         let table_in = default_table_in();
         let mut tables = initialized_tables_component(pool, &table_in).await;
-        let create_table_name = String::from("account");
-        tables
-            .add_table(BTableIn {
-                table_name: create_table_name.clone(),
-                columns: vec![
-                    BColumn {
-                        name: String::from("username"),
-                        datatype: BDataType::TEXT,
-                    },
-                    BColumn {
-                        name: String::from("password"),
-                        datatype: BDataType::TEXT,
-                    },
-                    BColumn {
-                        name: String::from("balance"),
-                        datatype: BDataType::INT,
-                    },
-                    BColumn {
-                        name: String::from("join_date"),
-                        datatype: BDataType::TIMESTAMP,
-                    },
-                ],
-            })
-            .await;
+        let create_table_in = BTableIn {
+            table_name: String::from("accounts"),
+            columns: vec![
+                BColumn {
+                    name: String::from("id"),
+                    datatype: BDataType::INT,
+                    constraints: vec![BConstraint::PrimaryKey],
+                },
+                BColumn {
+                    name: String::from("username"),
+                    datatype: BDataType::TEXT,
+                    constraints: vec![BConstraint::ForeignKey(
+                        table_in.table_name.clone(),
+                        table_in.columns[0].name.clone(),
+                    )],
+                },
+                BColumn {
+                    name: String::from("password"),
+                    datatype: BDataType::TEXT,
+                    constraints: vec![],
+                },
+                BColumn {
+                    name: String::from("balance"),
+                    datatype: BDataType::INT,
+                    constraints: vec![],
+                },
+                BColumn {
+                    name: String::from("join_date"),
+                    datatype: BDataType::TIMESTAMP,
+                    constraints: vec![],
+                },
+            ],
+        };
+        tables.add_table(create_table_in.clone()).await;
         let mut expected_tables = vec![
             BTable {
                 table_name: table_in.table_name,
             },
             BTable {
-                table_name: create_table_name,
+                table_name: create_table_in.table_name.clone(),
             },
         ];
         expected_tables.sort_by(|a, b| b.table_name.cmp(&a.table_name));
@@ -132,6 +147,26 @@ mod tests {
             .sort_by(|a, b| b.table_name.cmp(&a.table_name));
 
         assert_eq!(tables.tables, Some(expected_tables));
+        tables
+            .set_table_info(create_table_in.table_name.clone())
+            .await;
+        assert_eq!(
+            tables.table_info.as_ref().unwrap().table_name,
+            create_table_in.table_name
+        );
+        assert_eq!(
+            tables
+                .table_info
+                .as_ref()
+                .unwrap()
+                .columns_info
+                .clone()
+                .sort_by(|a, b| b.name.cmp(&a.name)),
+            create_table_in
+                .columns
+                .clone()
+                .sort_by(|a, b| b.name.cmp(&a.name))
+        );
     }
 
     #[sqlx::test]

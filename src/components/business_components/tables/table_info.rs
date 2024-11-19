@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BColumnsInfo, BDataType, BTable, BTableChangeEvents,
-    BTableIn, BusinessComponent,
+    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
+    BTableChangeEvents, BTableIn, BusinessComponent,
 };
 use std::sync::Arc;
 
@@ -38,14 +38,11 @@ impl TableInfo {
             .get_columns_info(&self.table_name)
             .await
             .unwrap();
-        let columns_info_with_enum_datatype = columns_info
+        let columns_info_with_enums = columns_info
             .into_iter()
-            .map(|column| BColumn {
-                name: column.column_name,
-                datatype: BDataType::to_datatype(column.data_type),
-            })
+            .map(|column_info| BColumn::to_column(column_info))
             .collect();
-        self.columns_info = columns_info_with_enum_datatype;
+        self.columns_info = columns_info_with_enums;
     }
 
     pub fn add_table_change_event(&mut self, table_change_event: BTableChangeEvents) {
@@ -65,6 +62,9 @@ impl TableInfo {
             BTableChangeEvents::AddColumn(column_name, data_type) => {
                 self.handle_add_column(column_name, data_type);
             }
+            BTableChangeEvents::AddForeignKey(column_name, referenced_table, referenced_column) => {
+            }
+            BTableChangeEvents::AddPrimaryKey(column_name) => {}
         }
         println!("{:?}", self.table_change_events);
     }
@@ -426,6 +426,7 @@ mod tests {
             columns: vec![BColumn {
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
+                constraints: vec![],
             }],
         }
     }
@@ -446,6 +447,7 @@ mod tests {
         assert_eq!(
             table_info.columns_info,
             vec![BColumn {
+                constraints: vec![],
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
             }]
@@ -522,22 +524,27 @@ mod tests {
         table_info.alter_table().await;
         let mut expected_columns = vec![
             BColumn {
+                constraints: vec![],
                 name: String::from("name"),
                 datatype: BDataType::INT,
             },
             BColumn {
+                constraints: vec![],
                 name: String::from("email"),
                 datatype: BDataType::TEXT,
             },
             BColumn {
+                constraints: vec![],
                 name: String::from("active_status"),
                 datatype: BDataType::TEXT,
             },
             BColumn {
+                constraints: vec![],
                 name: String::from("last_login"),
                 datatype: BDataType::TIMESTAMP,
             },
             BColumn {
+                constraints: vec![],
                 name: String::from("country"),
                 datatype: BDataType::TEXT,
             },

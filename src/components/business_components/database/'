@@ -1,7 +1,7 @@
 use crate::components::business_components::database::{
     database::create_database_pool,
     models::{ColumnsInfo, Table},
-    schemas::{Constraint, TableChangeEvents, TableIn},
+    schemas::{TableChangeEvents, TableIn},
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 
@@ -37,34 +37,12 @@ impl Repository {
         &self,
         table_name: &str,
     ) -> Result<Vec<ColumnsInfo>, Box<sqlx::Error>> {
-        let res = sqlx::query_as::<_, ColumnsInfo>(
-                        "SELECT
-                        c.column_name,
-                        c.data_type,
-                        ARRAY_AGG(tc.constraint_type::TEXT) AS constraint_types,
-                        ARRAY_AGG(ccu.table_name::TEXT) AS referenced_tables,
-                        ARRAY_AGG(ccu.column_name::TEXT) AS referenced_columns
-                    FROM
-                        information_schema.columns AS c
-                    LEFT JOIN
-                        information_schema.key_column_usage AS kcu
-                        ON c.table_name = kcu.table_name
-                        AND c.column_name = kcu.column_name
-                    LEFT JOIN
-                        information_schema.table_constraints AS tc
-                        ON tc.constraint_name = kcu.constraint_name
-                        AND tc.table_name = c.table_name
-                    LEFT JOIN
-                        information_schema.referential_constraints AS rc
-                        ON rc.constraint_name = tc.constraint_name
-                    LEFT JOIN
-                        information_schema.constraint_column_usage AS ccu
-                        ON ccu.constraint_name = rc.unique_constraint_name
-                    WHERE
-                        c.table_name = $1 
-                    GROUP BY c.column_name, c.data_type",
-        )
-        .bind(&table_name)
+        let res = sqlx::query_as::<_, ColumnsInfo>(&format!(
+            "SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = '{}'",
+            table_name
+        ))
         .fetch_all(&self.pool)
         .await
         .unwrap();
@@ -72,59 +50,19 @@ impl Repository {
     }
 
     pub async fn create_table(&self, table_in: &TableIn) {
-        let mut primary_key_columns = vec![];
-
-        let columns_query_list: Vec<String> = table_in
+        let columns_query_list = table_in
             .columns
             .iter()
-            .map(|column| {
-                let mut column_configuration = vec![format!("\"{}\" {}", column.name, column.datatype)];
-                for constraint in &column.constraints {
-                    match constraint {
-                        Constraint::ForeignKey(referenced_table, referenced_column) => {
-                            column_configuration.push(format!(
-                                "REFERENCES \"{}\"(\"{}\")",
-                                referenced_table, referenced_column
-                            ));
-                        }
-                        Constraint::PrimaryKey => {
-                            primary_key_columns.push(column.name.clone());
-                        }
-                    }
-                }
-                column_configuration.join(" ")
-            })
-            .collect();
-
-        // If there are primary keys, append the PRIMARY KEY constraint
-        let mut full_query_list = columns_query_list.clone();
-        if !primary_key_columns.is_empty() {
-            full_query_list.push(format!(
-                "PRIMARY KEY ({})",
-                primary_key_columns
-                    .iter()
-                    .map(|col| format!("\"{}\"", col))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-
-        let columns_query_joined = format!("({})", full_query_list.join(", "));
-
-        // Construct the full SQL query
-        let query = format!(
-            "CREATE TABLE \"{}\" {}",
-            table_in.table_name, columns_query_joined
-        );
-
-        // Print the query for debugging
-        println!("Generated Query: {}", query);
-
-        // Execute the query
-        sqlx::query(&query)
-            .execute(&self.pool)
-            .await
-            .unwrap();
+            .map(|column| format!("{} {}", &column.name, &column.datatype.to_string()))
+            .collect::<Vec<_>>();
+        let columns_query_joined = format!("({})", columns_query_list.join(", "));
+        sqlx::query(&format!(
+            "CREATE TABLE {} {}",
+            &table_in.table_name, &columns_query_joined
+        ))
+        .execute(&self.pool)
+        .await
+        .unwrap();
     }
 
     pub async fn delete_table(&self, table_name: &str) {
@@ -188,7 +126,7 @@ impl Repository {
 
                 TableChangeEvents::AddPrimaryKey(column_name) => {
                      format!(
-                        "ALTER TABLE \"{}\" ADD PRIMARY KEY (\"{}\")",
+                        "ALTER TABLE \"{}\" ADD CONSTRAINT FOREGIN KEY(\"{}\") REFERENCES \"{}\"(\"{}\")",
                          current_table_name, column_name )
  
                 }
