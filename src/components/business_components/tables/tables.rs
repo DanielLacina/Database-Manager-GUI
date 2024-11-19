@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
-    BTableChangeEvents, BTableIn, BTableInfo, BusinessComponent,
+    BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::tables::table_info::TableInfo;
 use std::sync::Arc;
@@ -25,6 +25,10 @@ impl Tables {
             tables: None,
             table_info: None,
         }
+    }
+
+    pub async fn get_general_tables_info(&self) -> Vec<BTableGeneralInfo> {
+        self.repository.get_general_tables_info().await.unwrap()
     }
 
     pub async fn set_table_info(&mut self, table_name: String) {

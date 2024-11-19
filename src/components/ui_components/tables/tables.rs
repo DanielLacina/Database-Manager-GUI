@@ -15,6 +15,7 @@ use iced::{
     alignment,
     alignment::Vertical,
     border::Radius,
+    futures::join,
     widget::{
         button, checkbox, column, container, row, scrollable, text, text_input, Button, Checkbox,
         Column, PickList, Row, Text,
@@ -127,16 +128,24 @@ impl UIComponent for TablesUI {
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        tables.initialize_component().await;
-                        tables
+                        let read_tables = tables.clone();
+                        let (tables_result, tables_general_info) = join!(
+                            tables.initialize_component(),
+                            read_tables.get_general_tables_info()
+                        );
+                        (tables, tables_general_info)
                     },
-                    |tables| {
-                        Self::EventType::message(Self::EventType::ComponentInitialized(tables))
+                    |(tables, tables_general_info)| {
+                        Self::EventType::message(Self::EventType::ComponentInitialized(
+                            tables,
+                            tables_general_info,
+                        ))
                     },
                 )
             }
-            Self::EventType::ComponentInitialized(tables) => {
+            Self::EventType::ComponentInitialized(tables, tables_general_info) => {
                 self.tables = tables;
+                self.create_table_form.tables_general_info = Some(tables_general_info);
                 Task::none()
             }
             Self::EventType::ConfirmDeleteTable => {
@@ -151,11 +160,18 @@ impl UIComponent for TablesUI {
 
                     Task::perform(
                         async move {
-                            tables.delete_table(table_to_delete).await;
-                            tables
+                            let read_tables = tables.clone();
+                            let (tables_result, tables_general_info) = join!(
+                                tables.delete_table(table_to_delete),
+                                read_tables.get_general_tables_info()
+                            );
+                            (tables, tables_general_info)
                         },
-                        |tables| {
-                            Self::EventType::message(Self::EventType::ComponentInitialized(tables))
+                        |(tables, tables_general_info)| {
+                            Self::EventType::message(Self::EventType::SetTables(
+                                tables,
+                                tables_general_info,
+                            ))
                         },
                     )
                 } else {
@@ -170,14 +186,24 @@ impl UIComponent for TablesUI {
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        tables.update_tables().await;
-                        tables
+                        let read_tables = tables.clone();
+                        let (tables_result, tables_general_info) = join!(
+                            tables.update_tables(),
+                            read_tables.get_general_tables_info()
+                        );
+                        (tables, tables_general_info)
                     },
-                    |tables| Self::EventType::message(Self::EventType::SetTables(tables)),
+                    |(tables, tables_general_info)| {
+                        Self::EventType::message(Self::EventType::SetTables(
+                            tables,
+                            tables_general_info,
+                        ))
+                    },
                 )
             }
-            Self::EventType::SetTables(tables) => {
+            Self::EventType::SetTables(tables, tables_general_info) => {
                 self.tables = tables;
+                self.create_table_form.tables_general_info = Some(tables_general_info);
                 Task::none()
             }
         }
@@ -189,7 +215,7 @@ impl TablesUI {
         Self {
             table_filter: String::default(),
             show_create_table_form: false,
-            create_table_form: CreateTableFormUI::new(),
+            create_table_form: CreateTableFormUI::new(None),
             tables,
             single_table_info: None,
             table_to_delete: None,

@@ -1,6 +1,6 @@
 use crate::components::business_components::database::{
     database::create_database_pool,
-    models::{ColumnsInfo, Table},
+    models::{ColumnsInfo, Table, TableGeneralInfo},
     schemas::{Constraint, TableChangeEvents, TableIn},
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
@@ -26,6 +26,27 @@ impl Repository {
       FROM information_schema.tables
      WHERE table_schema='public'
        AND table_type='BASE TABLE'",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap();
+        Ok(res)
+    }
+
+    pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, Box<sqlx::Error>> {
+      let res = sqlx::query_as::<_, TableGeneralInfo>(
+            "select
+                        t.table_name,
+                        array_agg(c.column_name::text) as columns
+                    from
+                        information_schema.tables t
+                    inner join information_schema.columns c on
+                        t.table_name = c.table_name
+                    where
+                        t.table_schema = 'public'
+                        and t.table_type= 'BASE TABLE'
+                        and c.table_schema = 'public'
+                    group by t.table_name"
         )
         .fetch_all(&self.pool)
         .await

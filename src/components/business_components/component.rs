@@ -1,4 +1,6 @@
-use crate::components::business_components::database::models::{ColumnsInfo, Table};
+use crate::components::business_components::database::models::{
+    ColumnsInfo, Table, TableGeneralInfo,
+};
 use crate::components::business_components::database::schemas::{
     Column, Constraint, DataType, TableChangeEvents, TableIn,
 };
@@ -11,6 +13,7 @@ pub type BDataType = DataType;
 pub type BTableIn = TableIn;
 pub type BTableChangeEvents = TableChangeEvents;
 pub type BTableInfo = TableInfo;
+pub type BTableGeneralInfo = TableGeneralInfo;
 pub type BConstraint = Constraint;
 
 pub trait BusinessComponent {

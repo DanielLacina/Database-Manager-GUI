@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BDataType, BTable, BTableIn, BTableInfo},
+    component::{BDataType, BTable, BTableGeneralInfo, BTableIn, BTableInfo},
     components::BusinessTables,
 };
 use crate::components::ui_components::{component::Event, events::Message};
@@ -8,7 +8,7 @@ use crate::components::ui_components::{component::Event, events::Message};
 pub enum TablesMessage {
     UpdateTableFilter(String),
     UpdateTables,
-    SetTables(BusinessTables),
+    SetTables(BusinessTables, Vec<BTableGeneralInfo>),
     ShowOrRemoveCreateTableForm,
     GetSingleTableInfo(String),
     SetSingleTableInfo(BTableInfo),
@@ -16,7 +16,7 @@ pub enum TablesMessage {
     SingleTableInfo(TableInfoMessage),
     CreateTableForm(CreateTableFormMessage),
     InitializeComponent,
-    ComponentInitialized(BusinessTables),
+    ComponentInitialized(BusinessTables, Vec<BTableGeneralInfo>),
     RequestDeleteTable(String),
     ConfirmDeleteTable,
     CancelDeleteTable,
@@ -38,7 +38,10 @@ pub enum CreateTableFormMessage {
     UpdateTableName(String),
     TableCreated(BusinessTables, String),
     SetOrRemovePrimaryKey(usize),
+    AddOrRemoveForeignKey(usize, String, String),
     ShowOrRemoveCreateTableForm,
+    ToggleForeignKeyDropdown(usize),
+    ToggleForeignKeyTable(usize, String),
 }
 
 impl Event for CreateTableFormMessage {
