@@ -67,7 +67,7 @@ impl UIComponent for CreateTableFormUI {
                 }
                 Task::none()
             }
-            Self::EventType::AddOrRemoveForeignKey(
+            Self::EventType::AddForeignKey(
                 index,
                 referenced_table_name,
                 referenced_column_name,
@@ -78,12 +78,14 @@ impl UIComponent for CreateTableFormUI {
                         matches!(
                             constraint,
                             BConstraint::ForeignKey(existing_table_name, existing_column_name)
-                            if *existing_table_name == referenced_table_name
-                                && *existing_column_name == referenced_column_name
                         )
                     }) {
                         // Remove the foreign key constraint if it exists
                         column.constraints.remove(existing_index);
+                        column.constraints.push(BConstraint::ForeignKey(
+                            referenced_table_name,
+                            referenced_column_name,
+                        ));
                     } else {
                         // Add the foreign key constraint if it does not exist
                         column.constraints.push(BConstraint::ForeignKey(
@@ -207,7 +209,13 @@ impl CreateTableFormUI {
         for (index, column) in self.create_table_input.columns.iter().enumerate() {
             columns_list = columns_list.push(self.column_input_row(index, column));
         }
-        scrollable(columns_list).height(Length::Fill).into()
+        scrollable(columns_list)
+            .height(Length::Fill)
+            .direction(scrollable::Direction::Both {
+                vertical: scrollable::Scrollbar::new(),
+                horizontal: scrollable::Scrollbar::new(),
+            })
+            .into()
     }
 
     fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
@@ -218,7 +226,7 @@ impl CreateTableFormUI {
                     <CreateTableFormUI as UIComponent>::EventType::UpdateColumnName(index, value),
                 )
             })
-            .width(Length::FillPortion(2))
+            .width(200)
             .style(|_, _| text_input_style());
 
         // Data type picker
@@ -231,7 +239,7 @@ impl CreateTableFormUI {
                 )
             },
         )
-        .width(Length::FillPortion(1));
+        .width(150);
 
         // Primary key checkbox
         let primary_key_checkbox = checkbox(
@@ -246,6 +254,21 @@ impl CreateTableFormUI {
 
         // Foreign key dropdown
         let foreign_key_dropdown = self.render_foreign_key_button(index);
+        let mut constraints_column = Column::new().spacing(5).padding(5);
+
+        // Foreign key constraints display
+        if !column.constraints.is_empty() {
+            for constraint in &column.constraints {
+                if let BConstraint::ForeignKey(table, column) = constraint {
+                    constraints_column =
+                        constraints_column.push(text(format!("FK: {}.{}", table, column)));
+                }
+            }
+        }
+
+        let foreign_key_constraints = container(constraints_column)
+            .padding(10)
+            .style(|_| constraints_container_style());
 
         // Remove column button
         let remove_button = button("Remove")
@@ -261,12 +284,12 @@ impl CreateTableFormUI {
             datatype_input,
             primary_key_checkbox,
             foreign_key_dropdown,
+            foreign_key_constraints, // Add the constraints display here
             remove_button
         ]
         .spacing(10)
         .into()
     }
-
     fn render_foreign_key_button<'a>(&'a self, index: usize) -> Element<'a, Message> {
         // Button to show the foreign key tables
         let button = button("Set Foreign Key")
@@ -289,7 +312,6 @@ impl CreateTableFormUI {
             button.into()
         }
     }
-
     fn render_foreign_key_dropdown<'a>(&'a self, index: usize) -> Element<'a, Message> {
         // Check if tables_general_info is available
         if let Some(tables) = &self.tables_general_info {
@@ -317,14 +339,14 @@ impl CreateTableFormUI {
 
                     for column_name in &table.columns {
                         let column_button = button(text(column_name))
-                        .style(|_, _| column_button_style())
-                        .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
-                            <CreateTableFormUI as UIComponent>::EventType::AddOrRemoveForeignKey(
-                                index,
-                                table_name.clone(),
-                                column_name.clone(),
-                            ),
-                        ));
+                            .style(|_, _| column_button_style())
+                            .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
+                                <CreateTableFormUI as UIComponent>::EventType::AddForeignKey(
+                                    index,
+                                    table_name.clone(),
+                                    column_name.clone(),
+                                ),
+                            ));
                         columns_list = columns_list.push(column_button);
                     }
 
@@ -370,6 +392,23 @@ fn container_style() -> container::Style {
             color: Color::BLACK,
             offset: Vector::new(0.0, 2.0),
             blur_radius: 5.0,
+        },
+    }
+}
+
+fn constraints_container_style() -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.95, 0.95, 0.95))),
+        border: Border {
+            color: Color::from_rgb(0.85, 0.85, 0.85),
+            width: 1.0,
+            radius: Radius::from(5.0),
+        },
+        text_color: Some(Color::BLACK),
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.05),
+            offset: Vector::new(0.0, 1.0),
+            blur_radius: 2.0,
         },
     }
 }

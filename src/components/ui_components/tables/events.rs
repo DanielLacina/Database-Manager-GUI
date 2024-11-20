@@ -38,7 +38,7 @@ pub enum CreateTableFormMessage {
     UpdateTableName(String),
     TableCreated(BusinessTables, String),
     SetOrRemovePrimaryKey(usize),
-    AddOrRemoveForeignKey(usize, String, String),
+    AddForeignKey(usize, String, String),
     ShowOrRemoveCreateTableForm,
     ToggleForeignKeyDropdown(usize),
     ToggleForeignKeyTable(usize, String),
