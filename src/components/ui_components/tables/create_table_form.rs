@@ -127,7 +127,11 @@ impl UIComponent for CreateTableFormUI {
             Self::EventType::ShowOrRemoveCreateTableForm => {
                 if self.create_table_input.columns.len() == 0 {
                     for _ in 0..1 {
-                        self.create_table_input.columns.push(BColumn::default());
+                        self.create_table_input.columns.push(BColumn {
+                            name: String::from("id"),
+                            datatype: BDataType::INT,
+                            constraints: vec![BConstraint::PrimaryKey],
+                        });
                     }
                 }
                 Task::none()
