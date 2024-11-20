@@ -1,5 +1,5 @@
 use crate::components::business_components::component::{
-    BColumn, BConstraint, BDataType, BTable, BTableIn, BusinessComponent,
+    BColumn, BConstraint, BDataType, BTableGeneralInfo, BTableIn, BusinessComponent,
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
@@ -21,6 +21,9 @@ use regex::Regex;
 #[derive(Debug, Clone)]
 pub struct CreateTableFormUI {
     create_table_input: BTableIn,
+    pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
+    active_foreign_key_table: Option<String>,
+    active_foreign_key_column: Option<usize>,
 }
 
 impl UIComponent for CreateTableFormUI {
@@ -64,6 +67,35 @@ impl UIComponent for CreateTableFormUI {
                 }
                 Task::none()
             }
+            Self::EventType::AddForeignKey(
+                index,
+                referenced_table_name,
+                referenced_column_name,
+            ) => {
+                if let Some(column) = self.create_table_input.columns.get_mut(index) {
+                    // Find the index of the existing foreign key constraint
+                    if let Some(existing_index) = column.constraints.iter().position(|constraint| {
+                        matches!(
+                            constraint,
+                            BConstraint::ForeignKey(existing_table_name, existing_column_name)
+                        )
+                    }) {
+                        // Remove the foreign key constraint if it exists
+                        column.constraints.remove(existing_index);
+                        column.constraints.push(BConstraint::ForeignKey(
+                            referenced_table_name,
+                            referenced_column_name,
+                        ));
+                    } else {
+                        // Add the foreign key constraint if it does not exist
+                        column.constraints.push(BConstraint::ForeignKey(
+                            referenced_table_name,
+                            referenced_column_name,
+                        ));
+                    }
+                }
+                Task::none()
+            }
             Self::EventType::UpdateTableName(input) => {
                 self.create_table_input.table_name = input;
                 Task::none()
@@ -81,14 +113,35 @@ impl UIComponent for CreateTableFormUI {
                 }
                 Task::none()
             }
+            Self::EventType::ToggleForeignKeyDropdown(index) => {
+                // Toggle the dropdown for the specified column
+                if self.active_foreign_key_column == Some(index) {
+                    self.active_foreign_key_column = None;
+                } else {
+                    self.active_foreign_key_column = Some(index);
+                }
+                Task::none()
+            }
+            Self::EventType::ToggleForeignKeyTable(_, table_name) => {
+                // Toggle the column list for the specified table
+                if self.active_foreign_key_table == Some(table_name.clone()) {
+                    self.active_foreign_key_table = None;
+                } else {
+                    self.active_foreign_key_table = Some(table_name);
+                }
+                Task::none()
+            }
         }
     }
 }
 
 impl CreateTableFormUI {
-    pub fn new() -> Self {
+    pub fn new(tables_general_info: Option<Vec<BTableGeneralInfo>>) -> Self {
         Self {
             create_table_input: BTableIn::default(),
+            tables_general_info,
+            active_foreign_key_column: None,
+            active_foreign_key_table: None,
         }
     }
 
@@ -156,19 +209,27 @@ impl CreateTableFormUI {
         for (index, column) in self.create_table_input.columns.iter().enumerate() {
             columns_list = columns_list.push(self.column_input_row(index, column));
         }
-        scrollable(columns_list).height(Length::Fill).into()
+        scrollable(columns_list)
+            .height(Length::Fill)
+            .direction(scrollable::Direction::Both {
+                vertical: scrollable::Scrollbar::new(),
+                horizontal: scrollable::Scrollbar::new(),
+            })
+            .into()
     }
 
     fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
+        // Column name input
         let name_input = text_input("Column Name", &column.name)
             .on_input(move |value| {
                 <CreateTableFormUI as UIComponent>::EventType::message(
                     <CreateTableFormUI as UIComponent>::EventType::UpdateColumnName(index, value),
                 )
             })
-            .width(Length::FillPortion(2))
+            .width(200)
             .style(|_, _| text_input_style());
 
+        // Data type picker
         let datatype_input = PickList::new(
             vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
             Some(&column.datatype),
@@ -178,9 +239,10 @@ impl CreateTableFormUI {
                 )
             },
         )
-        .width(Length::FillPortion(1));
+        .width(150);
 
-        let primary_key_checkbox: Checkbox<'_, Message, Theme, iced::Renderer> = checkbox(
+        // Primary key checkbox
+        let primary_key_checkbox = checkbox(
             "Primary Key",
             column.constraints.contains(&BConstraint::PrimaryKey),
         )
@@ -190,21 +252,132 @@ impl CreateTableFormUI {
             )
         });
 
-        let remove_button = button("🗑️ Remove")
+        // Foreign key dropdown
+        let foreign_key_dropdown = self.render_foreign_key_button(index);
+        let remove_button = button("Remove")
             .style(|_, _| button_style())
             .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
                 <CreateTableFormUI as UIComponent>::EventType::RemoveColumn(index),
             ))
             .padding(10);
 
+        // Construct the row layout
         row![
             name_input,
             datatype_input,
             primary_key_checkbox,
+            foreign_key_dropdown,
             remove_button
         ]
         .spacing(10)
         .into()
+    }
+    fn render_foreign_key_button<'a>(&'a self, index: usize) -> Element<'a, Message> {
+        // Button to show the foreign key tables
+        let button_text = if let Some(column_info) = self.create_table_input.columns.get(index) {
+            if let Some(foreign_key_constraint) = column_info
+                .constraints
+                .iter()
+                .find(|constraint| matches!(constraint, BConstraint::ForeignKey(_, _)))
+            {
+                if let BConstraint::ForeignKey(referenced_table_name, referenced_column_name) =
+                    foreign_key_constraint
+                {
+                    text(format!(
+                        "{}.{}",
+                        referenced_table_name, referenced_column_name
+                    ))
+                } else {
+                    text("Set Foreign Key")
+                }
+            } else {
+                text("Set Foreign Key")
+            }
+        } else {
+            text("Set Foreign Key")
+        };
+        let button = button(button_text).style(|_, _| button_style()).on_press(
+            <CreateTableFormUI as UIComponent>::EventType::message(
+                <CreateTableFormUI as UIComponent>::EventType::ToggleForeignKeyDropdown(index),
+            ),
+        );
+
+        // Check if the current column's foreign key dropdown is active
+        if self.active_foreign_key_column == Some(index) {
+            // Render the foreign key dropdown
+            let foreign_key_dropdown = self.render_foreign_key_dropdown(index);
+            Column::new()
+                .push(button)
+                .push(foreign_key_dropdown)
+                .spacing(5)
+                .into()
+        } else {
+            // Render just the button
+            button.into()
+        }
+    }
+    fn render_foreign_key_dropdown<'a>(&'a self, index: usize) -> Element<'a, Message> {
+        if let Some(tables) = &self.tables_general_info {
+            // Initialize a column for the dropdown
+            let mut dropdown = Column::new().spacing(10).padding(10);
+
+            for table in tables {
+                let table_name = table.table_name.clone();
+
+                // Create a button for the table name
+                let table_button = button(text(table_name.clone()))
+                    .style(|_, _| table_button_style())
+                    .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
+                        <CreateTableFormUI as UIComponent>::EventType::ToggleForeignKeyTable(
+                            index,
+                            table_name.clone(),
+                        ),
+                    ));
+
+                // Check if this table is expanded
+                let expanded_table = if matches!(self.active_foreign_key_table, Some(ref name) if name == &table_name)
+                {
+                    // Create a PickList for the columns in the table
+                    let selected: Option<String> = None;
+                    let column_picklist =
+                        PickList::new(table.columns.clone(), selected, move |column_name| {
+                            <CreateTableFormUI as UIComponent>::EventType::message(
+                                <CreateTableFormUI as UIComponent>::EventType::AddForeignKey(
+                                    index,
+                                    table_name.clone(),
+                                    column_name,
+                                ),
+                            )
+                        })
+                        .width(150);
+
+                    // Combine table button and column picklist in a column
+                    Column::new()
+                        .push(table_button)
+                        .push(column_picklist)
+                        .spacing(5)
+                } else {
+                    // Only show the table button if not expanded
+                    Column::new().push(table_button)
+                };
+
+                // Add the expanded or non-expanded table to the dropdown
+                dropdown = dropdown.push(expanded_table);
+            }
+
+            // Wrap the dropdown in a scrollable container
+            scrollable(container(dropdown.padding(10)).style(|_| dropdown_style()))
+                .height(Length::Shrink)
+                .width(150)
+                .into()
+        } else {
+            // If no tables are available, show a placeholder
+            container(text("No tables available"))
+                .height(Length::Shrink)
+                .width(Length::FillPortion(2))
+                .style(|_| dropdown_style())
+                .into()
+        }
     }
 }
 
@@ -225,6 +398,23 @@ fn container_style() -> container::Style {
         },
     }
 }
+
+fn constraints_container_style() -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.95, 0.95, 0.95))),
+        border: Border {
+            color: Color::from_rgb(0.85, 0.85, 0.85),
+            width: 1.0,
+            radius: Radius::from(5.0),
+        },
+        text_color: Some(Color::BLACK),
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.05),
+            offset: Vector::new(0.0, 1.0),
+            blur_radius: 2.0,
+        },
+    }
+}
 fn button_style() -> button::Style {
     button::Style {
         background: Some(Background::Color(Color::from_rgb(0.0, 0.75, 0.65))),
@@ -238,6 +428,57 @@ fn button_style() -> button::Style {
             color: Color::BLACK,
             offset: Vector::new(0.0, 3.0),
             blur_radius: 5.0,
+        },
+    }
+}
+
+fn table_button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.2, 0.4, 0.8))), // Blue background
+        border: Border {
+            color: Color::from_rgb(0.1, 0.3, 0.6), // Darker blue border
+            width: 2.0,
+            radius: Radius::from(6.0),
+        },
+        text_color: Color::WHITE, // White text for contrast
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.5), // Slight shadow for depth
+            offset: Vector::new(0.0, 2.0),
+            blur_radius: 10.0,
+        },
+    }
+}
+
+fn column_button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.4, 0.8, 0.2))), // Green background
+        border: Border {
+            color: Color::from_rgb(0.3, 0.6, 0.1), // Darker green border
+            width: 1.5,
+            radius: Radius::from(5.0),
+        },
+        text_color: Color::BLACK, // Black text for contrast
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.3), // Subtle shadow
+            offset: Vector::new(0.0, 1.0),
+            blur_radius: 5.0,
+        },
+    }
+}
+
+fn dropdown_style() -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))), // Dark background
+        border: Border {
+            color: Color::from_rgb(0.0, 0.6, 0.6), // Aqua border color
+            width: 2.0,
+            radius: Radius::from(5.0),
+        },
+        text_color: Some(Color::WHITE), // White text color
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.5), // Slight shadow for depth
+            offset: Vector::new(0.0, 2.0),
+            blur_radius: 10.0,
         },
     }
 }

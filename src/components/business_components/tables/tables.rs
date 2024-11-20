@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
-    BTableChangeEvents, BTableIn, BTableInfo, BusinessComponent,
+    BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::tables::table_info::TableInfo;
 use std::sync::Arc;
@@ -25,6 +25,10 @@ impl Tables {
             tables: None,
             table_info: None,
         }
+    }
+
+    pub async fn get_general_tables_info(&self) -> Vec<BTableGeneralInfo> {
+        self.repository.get_general_tables_info().await.unwrap()
     }
 
     pub async fn set_table_info(&mut self, table_name: String) {
@@ -176,5 +180,21 @@ mod tests {
         tables.delete_table(table_in.table_name).await;
         let mut expected_tables = vec![];
         assert_eq!(tables.tables, Some(expected_tables));
+    }
+
+    #[sqlx::test]
+    async fn test_get_general_table_info(pool: PgPool) {
+        let table_in = default_table_in();
+        let tables = initialized_tables_component(pool, &table_in).await;
+        let general_table_info = tables.get_general_tables_info().await;
+        let expected_general_table_info = vec![BTableGeneralInfo {
+            table_name: table_in.table_name,
+            columns: table_in
+                .columns
+                .into_iter()
+                .map(|column| column.name)
+                .collect(),
+        }];
+        assert_eq!(general_table_info, expected_general_table_info)
     }
 }
