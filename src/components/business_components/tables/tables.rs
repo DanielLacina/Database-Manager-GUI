@@ -181,4 +181,20 @@ mod tests {
         let mut expected_tables = vec![];
         assert_eq!(tables.tables, Some(expected_tables));
     }
+
+    #[sqlx::test]
+    async fn test_get_general_table_info(pool: PgPool) {
+        let table_in = default_table_in();
+        let tables = initialized_tables_component(pool, &table_in).await;
+        let general_table_info = tables.get_general_tables_info().await;
+        let expected_general_table_info = vec![BTableGeneralInfo {
+            table_name: table_in.table_name,
+            columns: table_in
+                .columns
+                .into_iter()
+                .map(|column| column.name)
+                .collect(),
+        }];
+        assert_eq!(general_table_info, expected_general_table_info)
+    }
 }
