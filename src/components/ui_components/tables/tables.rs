@@ -128,11 +128,9 @@ impl UIComponent for TablesUI {
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        let read_tables = tables.clone();
-                        let (tables_result, tables_general_info) = join!(
-                            tables.initialize_component(),
-                            read_tables.get_general_tables_info()
-                        );
+                        tables.update_tables().await;
+                        let tables_general_info = tables.get_general_tables_info().await;
+
                         (tables, tables_general_info)
                     },
                     |(tables, tables_general_info)| {
@@ -186,11 +184,9 @@ impl UIComponent for TablesUI {
                 let mut tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        let read_tables = tables.clone();
-                        let (tables_result, tables_general_info) = join!(
-                            tables.update_tables(),
-                            read_tables.get_general_tables_info()
-                        );
+                        tables.update_tables().await;
+                        let tables_general_info = tables.get_general_tables_info().await;
+
                         (tables, tables_general_info)
                     },
                     |(tables, tables_general_info)| {
