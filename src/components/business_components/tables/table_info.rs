@@ -194,6 +194,12 @@ impl TableInfo {
     }
 
     fn handle_remove_column(&mut self, column_name: String) {
+        if let Some(existing_event_index) = self.find_existing_add_primary_key_event(&column_name) {
+            self.table_change_events.remove(existing_event_index);
+        }
+        if let Some(existing_event_index) = self.find_existing_add_foreign_key_event(&column_name) {
+            self.table_change_events.remove(existing_event_index);
+        }
         if let Some(existing_event_index) = self.find_existing_add_column_event(&column_name) {
             self.table_change_events.remove(existing_event_index);
         } else if let Some(existing_event_index) =
@@ -467,10 +473,10 @@ mod tests {
             // 9. Rename the column "created_at" to "regiStringation_date"
             BTableChangeEvents::ChangeColumnName(
                 String::from("created_at"),
-                String::from("regiStringation_date"),
+                String::from("registration_date"),
             ),
             // 10. Remove the column "regiStringation_date"
-            BTableChangeEvents::RemoveColumn(String::from("regiStringation_date")),
+            BTableChangeEvents::RemoveColumn(String::from("registration_date")),
             // 11. Add a new column "is_active" with datatype BOOLEAN
             BTableChangeEvents::AddColumn(String::from("is_active"), BDataType::TEXT),
             // 12. Rename the column "is_active" to "active_status"
@@ -491,6 +497,7 @@ mod tests {
             BTableChangeEvents::ChangeTableName(String::from("clients")),
             // 17. Add a new column "phone_number" with datatype TEXT
             BTableChangeEvents::AddColumn(String::from("phone_number"), BDataType::TEXT),
+            BTableChangeEvents::AddPrimaryKey(String::from("phone_number")),
             // 18. Remove the column "phone_number"
             BTableChangeEvents::RemoveColumn(String::from("phone_number")),
             // 19. Change the datatype of the column "country" from TEXT to TEXT

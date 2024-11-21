@@ -60,6 +60,10 @@ pub enum TableInfoMessage {
     UpdateTableName(String),
     SubmitUpdateTable,
     UpdateTableInfo(BTableInfo),
+    ToggleForeignKeyDropdown(usize),
+    ToggleForeignKeyTable(usize, String),
+    AddForeignKey(usize, String, String),
+    RemoveForeignKey(usize),
 }
 
 impl Event for TableInfoMessage {

@@ -1,5 +1,7 @@
 use crate::components::business_components::{
-    component::{BColumn, BConstraint, BDataType, BTable, BTableIn, BusinessComponent},
+    component::{
+        BColumn, BConstraint, BDataType, BTable, BTableGeneralInfo, BTableIn, BusinessComponent,
+    },
     components::BusinessTables,
 };
 use crate::components::ui_components::{
@@ -13,7 +15,7 @@ use crate::components::ui_components::{
 };
 use iced::{
     alignment,
-    alignment::Vertical,
+    alignment::{Alignment, Vertical},
     border::Radius,
     futures::join,
     widget::{
@@ -23,6 +25,7 @@ use iced::{
     Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
 use regex::Regex;
+use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct TablesUI {
@@ -32,6 +35,7 @@ pub struct TablesUI {
     pub tables: BusinessTables,
     pub single_table_info: Option<TableInfoUI>,
     pub table_to_delete: Option<String>,
+    pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
 }
 
 impl UIComponent for TablesUI {
@@ -97,7 +101,10 @@ impl UIComponent for TablesUI {
             Self::EventType::SetSingleTableInfo(table_info) => {
                 self.tables.table_info = None; // object is no longer needed becasue logic is in
                                                // the table info ui component
-                self.single_table_info = Some(TableInfoUI::new(table_info));
+                self.single_table_info = Some(TableInfoUI::new(
+                    table_info,
+                    self.tables_general_info.clone(),
+                ));
                 Task::none()
             }
             Self::EventType::UndisplayTableInfo => {
@@ -199,7 +206,10 @@ impl UIComponent for TablesUI {
             }
             Self::EventType::SetTables(tables, tables_general_info) => {
                 self.tables = tables;
-                self.create_table_form.tables_general_info = Some(tables_general_info);
+                self.create_table_form.tables_general_info = Some(tables_general_info.clone());
+                if let Some(ref mut single_table_info) = &self.single_table_info {
+                    single_table_info.tables_general_info = Some(tables_general_info);
+                }
                 Task::none()
             }
         }
@@ -215,6 +225,7 @@ impl TablesUI {
             tables,
             single_table_info: None,
             table_to_delete: None,
+            tables_general_info: None,
         }
     }
 
