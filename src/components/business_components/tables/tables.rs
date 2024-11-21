@@ -106,7 +106,7 @@ mod tests {
             columns: vec![
                 BColumn {
                     name: String::from("id"),
-                    datatype: BDataType::INT,
+                    datatype: BDataType::INTEGER,
                     constraints: vec![BConstraint::PrimaryKey],
                 },
                 BColumn {
@@ -124,7 +124,7 @@ mod tests {
                 },
                 BColumn {
                     name: String::from("balance"),
-                    datatype: BDataType::INT,
+                    datatype: BDataType::INTEGER,
                     constraints: vec![],
                 },
                 BColumn {
@@ -189,10 +189,15 @@ mod tests {
         let general_table_info = tables.get_general_tables_info().await;
         let expected_general_table_info = vec![BTableGeneralInfo {
             table_name: table_in.table_name,
-            columns: table_in
+            column_names: table_in
                 .columns
-                .into_iter()
-                .map(|column| column.name)
+                .iter()
+                .map(|column| column.name.clone())
+                .collect(),
+            data_types: table_in
+                .columns
+                .iter()
+                .map(|column| column.datatype.to_string().to_lowercase())
                 .collect(),
         }];
         assert_eq!(general_table_info, expected_general_table_info)

@@ -34,19 +34,22 @@ impl Repository {
     }
 
     pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, Box<sqlx::Error>> {
-      let res = sqlx::query_as::<_, TableGeneralInfo>(
-            "select
-                        t.table_name,
-                        array_agg(c.column_name::text) as columns
-                    from
-                        information_schema.tables t
-                    inner join information_schema.columns c on
-                        t.table_name = c.table_name
-                    where
-                        t.table_schema = 'public'
-                        and t.table_type= 'BASE TABLE'
-                        and c.table_schema = 'public'
-                    group by t.table_name"
+        let res = sqlx::query_as::<_, TableGeneralInfo>(
+            "SELECT
+                    t.table_name,
+                    array_agg(c.column_name::TEXT) AS column_names,
+                    array_agg(c.data_type::TEXT) AS data_types
+                FROM
+                    information_schema.tables t
+                INNER JOIN
+                    information_schema.columns c
+                ON
+                    t.table_name = c.table_name AND t.table_schema = c.table_schema
+                WHERE
+                    t.table_schema = 'public'
+                    AND t.table_type = 'BASE TABLE'
+                GROUP BY
+                    t.table_name",
         )
         .fetch_all(&self.pool)
         .await
@@ -59,7 +62,7 @@ impl Repository {
         table_name: &str,
     ) -> Result<Vec<ColumnsInfo>, Box<sqlx::Error>> {
         let res = sqlx::query_as::<_, ColumnsInfo>(
-                        "SELECT
+            "SELECT
                         c.column_name,
                         c.data_type,
                         ARRAY_AGG(tc.constraint_type::TEXT) AS constraint_types,
@@ -99,7 +102,8 @@ impl Repository {
             .columns
             .iter()
             .map(|column| {
-                let mut column_configuration = vec![format!("\"{}\" {}", column.name, column.datatype)];
+                let mut column_configuration =
+                    vec![format!("\"{}\" {}", column.name, column.datatype)];
                 for constraint in &column.constraints {
                     match constraint {
                         Constraint::ForeignKey(referenced_table, referenced_column) => {
@@ -142,10 +146,7 @@ impl Repository {
         println!("Generated Query: {}", query);
 
         // Execute the query
-        sqlx::query(&query)
-            .execute(&self.pool)
-            .await
-            .unwrap();
+        sqlx::query(&query).execute(&self.pool).await.unwrap();
     }
 
     pub async fn delete_table(&self, table_name: &str) {
@@ -199,19 +200,36 @@ impl Repository {
                         current_table_name, column_name
                     )
                 }
-                TableChangeEvents::AddForeignKey(column_name,referenced_table, referenced_column) => {
-                     format!(
-                        "ALTER TABLE \"{}\" ADD CONSTRAINT FOREGIN KEY(\"{}\") REFERENCES \"{}\"(\"{}\")",
-                        current_table_name, column_name, referenced_table, referenced_column 
-                    )
- 
+                TableChangeEvents::AddForeignKey(
+                    column_name,
+                    referenced_table,
+                    referenced_column,
+                ) => {
+                    format!(
+                    "ALTER TABLE \"{}\" ADD CONSTRAINT fk_{}_{}_{} FOREIGN KEY (\"{}\") REFERENCES \"{}\" (\"{}\")",
+                    current_table_name, current_table_name, column_name, referenced_table, column_name, referenced_table, referenced_column
+                )
                 }
-
+                TableChangeEvents::RemoveForeignKey(column_name) => {
+                    format!(
+                        "ALTER TABLE \"{}\" DROP CONSTRAINT IF EXISTS fk_{}_{}_{}",
+                        current_table_name,
+                        current_table_name,
+                        column_name,
+                        "foreign_table_placeholder" // Replace "foreign_table_placeholder" with the actual foreign table if known
+                    )
+                }
                 TableChangeEvents::AddPrimaryKey(column_name) => {
-                     format!(
-                        "ALTER TABLE \"{}\" ADD PRIMARY KEY (\"{}\")",
-                         current_table_name, column_name )
- 
+                    format!(
+                        "ALTER TABLE \"{}\" ADD CONSTRAINT pk_{}_{} PRIMARY KEY (\"{}\")",
+                        current_table_name, current_table_name, column_name, column_name
+                    )
+                }
+                TableChangeEvents::RemovePrimaryKey(column_name) => {
+                    format!(
+                        "ALTER TABLE \"{}\" DROP CONSTRAINT IF EXISTS pk_{}_{}",
+                        current_table_name, current_table_name, column_name
+                    )
                 }
             };
 
