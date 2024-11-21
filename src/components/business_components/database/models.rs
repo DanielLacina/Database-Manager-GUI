@@ -15,5 +15,6 @@ pub struct ColumnsInfo {
 #[derive(sqlx::FromRow, Debug, Clone, PartialEq)]
 pub struct TableGeneralInfo {
     pub table_name: String,
-    pub columns: Vec<String>,
+    pub column_names: Vec<String>,
+    pub data_types: Vec<String>,
 }

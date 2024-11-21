@@ -16,7 +16,7 @@ use iced::{
     },
     Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
-use regex::Regex;
+use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct CreateTableFormUI {
@@ -129,7 +129,7 @@ impl UIComponent for CreateTableFormUI {
                     for _ in 0..1 {
                         self.create_table_input.columns.push(BColumn {
                             name: String::from("id"),
-                            datatype: BDataType::INT,
+                            datatype: BDataType::INTEGER,
                             constraints: vec![BConstraint::PrimaryKey],
                         });
                     }
@@ -254,7 +254,7 @@ impl CreateTableFormUI {
 
         // Data type picker
         let datatype_input = PickList::new(
-            vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
+            vec![BDataType::TEXT, BDataType::INTEGER, BDataType::TIMESTAMP],
             Some(&column.datatype),
             move |value| {
                 <CreateTableFormUI as UIComponent>::EventType::message(
@@ -369,8 +369,21 @@ impl CreateTableFormUI {
                 {
                     // Create a PickList for the columns in the table
                     let selected: Option<String> = None;
-                    let column_picklist =
-                        PickList::new(table.columns.clone(), selected, move |column_name| {
+                    let column_names_to_reference_by_datatype: Vec<String> =
+                        zip(table.column_names.clone(), table.data_types.clone())
+                            .filter(|(column_name, data_type)| {
+                                *data_type.to_lowercase()
+                                    == self.create_table_input.columns[index]
+                                        .datatype
+                                        .to_string()
+                                        .to_lowercase()
+                            })
+                            .map(|(column_name, data_type)| column_name)
+                            .collect();
+                    let column_picklist = PickList::new(
+                        column_names_to_reference_by_datatype,
+                        selected,
+                        move |column_name| {
                             <CreateTableFormUI as UIComponent>::EventType::message(
                                 <CreateTableFormUI as UIComponent>::EventType::AddForeignKey(
                                     index,
@@ -378,8 +391,9 @@ impl CreateTableFormUI {
                                     column_name,
                                 ),
                             )
-                        })
-                        .width(150);
+                        },
+                    )
+                    .width(150);
 
                     // Combine table button and column picklist in a column
                     Column::new()

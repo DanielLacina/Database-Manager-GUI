@@ -234,7 +234,7 @@ impl TableInfoUI {
                 .style(|_, _| text_input_style());
 
             let datatype_input = PickList::new(
-                vec![BDataType::TEXT, BDataType::INT, BDataType::TIMESTAMP],
+                vec![BDataType::TEXT, BDataType::INTEGER, BDataType::TIMESTAMP],
                 Some(&column_info.datatype),
                 move |value| {
                     <TableInfoUI as UIComponent>::EventType::message(
