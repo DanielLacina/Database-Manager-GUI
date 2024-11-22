@@ -1,7 +1,7 @@
 use crate::components::business_components::database::{
     database::create_database_pool,
     models::{ColumnsInfo, Table, TableGeneralInfo},
-    schemas::{Constraint, TableChangeEvents, TableIn},
+    schemas::{ColumnForeignKey, Constraint, TableChangeEvents, TableIn},
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 
@@ -200,23 +200,16 @@ impl Repository {
                         current_table_name, column_name
                     )
                 }
-                TableChangeEvents::AddForeignKey(
-                    column_name,
-                    referenced_table,
-                    referenced_column,
-                ) => {
+                TableChangeEvents::AddForeignKey(column_foreign_key) => {
                     format!(
-                    "ALTER TABLE \"{}\" ADD CONSTRAINT fk_{}_{}_{} FOREIGN KEY (\"{}\") REFERENCES \"{}\" (\"{}\")",
-                    current_table_name, current_table_name, column_name, referenced_table, column_name, referenced_table, referenced_column
+                    "ALTER TABLE \"{}\" ADD CONSTRAINT fk_{}_{} FOREIGN KEY (\"{}\") REFERENCES \"{}\" (\"{}\")",
+                    current_table_name, current_table_name, column_foreign_key.column_name, column_foreign_key.column_name, column_foreign_key.referenced_table, column_foreign_key.referenced_column
                 )
                 }
                 TableChangeEvents::RemoveForeignKey(column_name) => {
                     format!(
-                        "ALTER TABLE \"{}\" DROP CONSTRAINT IF EXISTS fk_{}_{}_{}",
-                        current_table_name,
-                        current_table_name,
-                        column_name,
-                        "foreign_table_placeholder" // Replace "foreign_table_placeholder" with the actual foreign table if known
+                        "ALTER TABLE \"{}\" DROP CONSTRAINT IF EXISTS fk_{}_{}",
+                        current_table_name, current_table_name, column_name,
                     )
                 }
                 TableChangeEvents::AddPrimaryKey(column_name) => {

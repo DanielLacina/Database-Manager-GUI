@@ -150,7 +150,8 @@ impl UIComponent for TablesUI {
             }
             Self::EventType::ComponentInitialized(tables, tables_general_info) => {
                 self.tables = tables;
-                self.create_table_form.tables_general_info = Some(tables_general_info);
+                self.create_table_form.tables_general_info = Some(tables_general_info.clone());
+                self.tables_general_info = Some(tables_general_info);
                 Task::none()
             }
             Self::EventType::ConfirmDeleteTable => {
@@ -207,7 +208,7 @@ impl UIComponent for TablesUI {
             Self::EventType::SetTables(tables, tables_general_info) => {
                 self.tables = tables;
                 self.create_table_form.tables_general_info = Some(tables_general_info.clone());
-                if let Some(ref mut single_table_info) = &self.single_table_info {
+                if let Some(single_table_info) = &mut self.single_table_info {
                     single_table_info.tables_general_info = Some(tables_general_info);
                 }
                 Task::none()

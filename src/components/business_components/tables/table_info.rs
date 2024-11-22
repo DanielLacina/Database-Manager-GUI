@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
-    BTableChangeEvents, BTableIn, BusinessComponent,
+    repository_module::BRepository, BColumn, BColumnForeignKey, BColumnsInfo, BConstraint,
+    BDataType, BTable, BTableChangeEvents, BTableIn, BusinessComponent,
 };
 use std::sync::Arc;
 
@@ -62,8 +62,8 @@ impl TableInfo {
             BTableChangeEvents::AddColumn(column_name, data_type) => {
                 self.handle_add_column(column_name, data_type);
             }
-            BTableChangeEvents::AddForeignKey(column_name, referenced_table, referenced_column) => {
-                self.handle_add_foreign_key(column_name, referenced_table, referenced_column);
+            BTableChangeEvents::AddForeignKey(column_foreign_key) => {
+                self.handle_add_foreign_key(column_foreign_key);
             }
             BTableChangeEvents::RemoveForeignKey(column_name) => {
                 self.handle_remove_foreign_key(column_name);
@@ -246,23 +246,15 @@ impl TableInfo {
         }
     }
 
-    fn handle_add_foreign_key(
-        &mut self,
-        column_name: String,
-        referenced_table: String,
-        referenced_column: String,
-    ) {
+    fn handle_add_foreign_key(&mut self, column_foreign_key: BColumnForeignKey) {
+        // only one foreign key allowed
         if let Some(existing_event_index) =
-            self.find_existing_remove_foreign_key_event(&column_name)
+            self.find_existing_remove_foreign_key_event(&column_foreign_key.column_name)
         {
             self.table_change_events.remove(existing_event_index);
         } else {
             self.table_change_events
-                .push(BTableChangeEvents::AddForeignKey(
-                    column_name,
-                    referenced_table,
-                    referenced_column,
-                ));
+                .push(BTableChangeEvents::AddForeignKey(column_foreign_key));
         }
     }
 
@@ -335,8 +327,8 @@ impl TableInfo {
 
     fn find_existing_add_foreign_key_event(&self, column_name: &str) -> Option<usize> {
         self.table_change_events.iter().position(|event| {
-            matches!(event, BTableChangeEvents::AddForeignKey(existing_column_name, _, _)
-                if existing_column_name == column_name)
+            matches!(event, BTableChangeEvents::AddForeignKey(existing_column_foreign_key)
+                if  existing_column_foreign_key.column_name == column_name)
         })
     }
 

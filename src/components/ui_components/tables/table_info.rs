@@ -1,7 +1,7 @@
 use crate::components::business_components::{
     component::{
-        BColumn, BConstraint, BDataType, BTable, BTableChangeEvents, BTableGeneralInfo, BTableIn,
-        BTableInfo, BusinessComponent,
+        BColumn, BColumnForeignKey, BConstraint, BDataType, BTable, BTableChangeEvents,
+        BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
     },
     components::BusinessTables,
 };
@@ -21,6 +21,7 @@ use iced::{
     },
     Alignment, Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
+use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct TableInfoUI {
@@ -146,15 +147,19 @@ impl UIComponent for TableInfoUI {
                     }
                     self.table_info
                         .add_table_change_event(BTableChangeEvents::AddForeignKey(
-                            column.name.clone(),
-                            referenced_table_name,
-                            referenced_column_name,
+                            BColumnForeignKey {
+                                column_name: column.name.clone(),
+                                referenced_table: referenced_table_name,
+                                referenced_column: referenced_column_name,
+                            },
                         ));
                 }
 
                 self.active_foreign_key_dropdown_column = None;
                 self.active_foreign_key_table_within_dropdown = None;
-                Task::none()
+                Task::done(ConsoleMessage::message(ConsoleMessage::LogMessage(
+                    self.formated_table_change_events(),
+                )))
             }
             Self::EventType::RemoveForeignKey(index) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
@@ -174,7 +179,9 @@ impl UIComponent for TableInfoUI {
                 self.active_foreign_key_dropdown_column = None;
                 self.active_foreign_key_table_within_dropdown = None;
 
-                Task::none()
+                Task::done(ConsoleMessage::message(ConsoleMessage::LogMessage(
+                    self.formated_table_change_events(),
+                )))
             }
             Self::EventType::ToggleForeignKeyDropdown(index) => {
                 // Toggle the dropdown for the specified column
@@ -331,6 +338,7 @@ impl TableInfoUI {
             .width(Length::FillPortion(1))
             .padding(5);
 
+            let foreign_key_dropdown = self.render_foreign_key_button(index);
             let remove_button = button("🗑️ Remove")
                 .style(|_, _| button_style())
                 .on_press(<TableInfoUI as UIComponent>::EventType::message(
@@ -343,6 +351,7 @@ impl TableInfoUI {
                     .spacing(20)
                     .push(name_input)
                     .push(datatype_input)
+                    .push(foreign_key_dropdown)
                     .push(remove_button)
                     .width(Length::Fill),
             );
@@ -470,7 +479,7 @@ impl TableInfoUI {
                 .into()
         } else {
             // If no tables are available, show a placeholder
-            container(text("No tables available"))
+            container(text("No Tables Avaliable").color(Color::from_rgb(0.2, 0.8, 0.6)))
                 .height(Length::Shrink)
                 .width(Length::FillPortion(2))
                 .style(|_| dropdown_style())
@@ -527,23 +536,22 @@ fn text_input_style() -> text_input::Style {
     }
 }
 
-fn constraints_container_style() -> container::style {
-    container::style {
-        background: some(background::color(color::from_rgb(0.95, 0.95, 0.95))),
-        border: border {
-            color: color::from_rgb(0.85, 0.85, 0.85),
+fn constraints_container_style() -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.95, 0.95, 0.95))),
+        border: Border {
+            color: Color::from_rgb(0.85, 0.85, 0.85),
             width: 1.0,
-            radius: radius::from(5.0),
+            radius: Radius::from(5.0),
         },
-        text_color: some(color::black),
-        shadow: shadow {
-            color: color::from_rgba(0.0, 0.0, 0.0, 0.05),
-            offset: vector::new(0.0, 1.0),
+        text_color: Some(Color::BLACK),
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.05),
+            offset: Vector::new(0.0, 1.0),
             blur_radius: 2.0,
         },
     }
 }
-
 fn table_button_style() -> button::Style {
     button::Style {
         background: Some(Background::Color(Color::from_rgb(0.2, 0.4, 0.8))), // Blue background
