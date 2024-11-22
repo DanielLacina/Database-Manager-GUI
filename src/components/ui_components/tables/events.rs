@@ -23,8 +23,8 @@ pub enum TablesMessage {
 }
 
 impl Event for TablesMessage {
-    fn message(event: Self) -> Message {
-        Message::Tables(event)
+    fn message(self) -> Message {
+        Message::Tables(self)
     }
 }
 
@@ -46,8 +46,8 @@ pub enum CreateTableFormMessage {
 }
 
 impl Event for CreateTableFormMessage {
-    fn message(event: Self) -> Message {
-        TablesMessage::message(TablesMessage::CreateTableForm(event))
+    fn message(self) -> Message {
+        TablesMessage::message(TablesMessage::CreateTableForm(self))
     }
 }
 
@@ -67,7 +67,7 @@ pub enum TableInfoMessage {
 }
 
 impl Event for TableInfoMessage {
-    fn message(event: Self) -> Message {
-        TablesMessage::message(TablesMessage::SingleTableInfo(event))
+    fn message(self) -> Message {
+        TablesMessage::message(TablesMessage::SingleTableInfo(self))
     }
 }

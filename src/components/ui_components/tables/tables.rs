@@ -232,9 +232,7 @@ impl TablesUI {
 
             let undisplay_button = button("🔙 Back")
                 .style(|_, _| button_style())
-                .on_press(<TablesUI as UIComponent>::EventType::message(
-                    <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
-                ))
+                .on_press(<TablesUI as UIComponent>::EventType::UndisplayTableInfo.message())
                 .padding(10);
 
             table_info_section = table_info_section.push(undisplay_button);
@@ -271,9 +269,7 @@ impl TablesUI {
             "Show create table form"
         })
         .style(|_, _| button_style())
-        .on_press(<TablesUI as UIComponent>::EventType::message(
-            <TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm,
-        ))
+        .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm.message())
         .padding(10);
 
         Column::new()
@@ -322,15 +318,11 @@ impl TablesUI {
     }
     fn delete_table_confirmation_modal<'a>(&'a self) -> Element<'a, Message> {
         let confirm_button = Button::new(text("Yes, delete"))
-            .on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::ConfirmDeleteTable,
-            ))
+            .on_press(<TablesUI as UIComponent>::EventType::ConfirmDeleteTable.message())
             .style(|_, _| delete_button_style());
 
-        let cancel_button =
-            Button::new(text("Cancel")).on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::CancelDeleteTable,
-            ));
+        let cancel_button = Button::new(text("Cancel"))
+            .on_press(<TablesUI as UIComponent>::EventType::CancelDeleteTable.message());
 
         let modal_content = container(
             Column::new()

@@ -187,9 +187,7 @@ impl CreateTableFormUI {
 
         let add_column_button = button("➕ Add Column")
             .style(|_, _| button_style())
-            .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
-                <CreateTableFormUI as UIComponent>::EventType::AddColumn,
-            ))
+            .on_press(<CreateTableFormUI as UIComponent>::EventType::AddColumn.message())
             .padding(10);
         form = form.push(add_column_button);
 

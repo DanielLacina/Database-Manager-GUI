@@ -70,7 +70,7 @@ impl Console {
 
         let clear_button = button(Text::new("Clear Messages"))
             .padding(10)
-            .on_press(ConsoleMessage::message(ConsoleMessage::ClearMessages));
+            .on_press(ConsoleMessage::ClearMessages.message());
         Column::new()
             .spacing(10)
             .push(scrollable_console)

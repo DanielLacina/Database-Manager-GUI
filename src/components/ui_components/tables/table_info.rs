@@ -256,18 +256,14 @@ impl TableInfoUI {
         let add_column_button = button("➕ Add Column")
             .style(|_, _| button_style())
             .padding(10)
-            .on_press(<TableInfoUI as UIComponent>::EventType::message(
-                <TableInfoUI as UIComponent>::EventType::AddColumn,
-            ));
+            .on_press(<TableInfoUI as UIComponent>::EventType::AddColumn.message());
         table_info_column = table_info_column.push(add_column_button);
 
         // Add "Update Table" button
         let submit_update_table_button = button("🛠️ Update Table")
             .style(|_, _| button_style())
             .padding(10)
-            .on_press(<TableInfoUI as UIComponent>::EventType::message(
-                <TableInfoUI as UIComponent>::EventType::SubmitUpdateTable,
-            ));
+            .on_press(<TableInfoUI as UIComponent>::EventType::SubmitUpdateTable.message());
         table_info_column = table_info_column.push(submit_update_table_button);
 
         // Apply the main border to the whole section only

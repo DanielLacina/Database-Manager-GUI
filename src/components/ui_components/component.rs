@@ -8,5 +8,5 @@ pub trait UIComponent {
 }
 
 pub trait Event {
-    fn message(event: Self) -> Message;
+    fn message(self) -> Message;
 }

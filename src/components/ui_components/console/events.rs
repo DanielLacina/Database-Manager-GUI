@@ -8,7 +8,7 @@ pub enum ConsoleMessage {
 }
 
 impl Event for ConsoleMessage {
-    fn message(event: Self) -> Message {
-        Message::Console(event)
+    fn message(self) -> Message {
+        Message::Console(self)
     }
 }
