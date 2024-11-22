@@ -8,7 +8,7 @@ use crate::components::ui_components::{component::Event, events::Message};
 pub enum TablesMessage {
     UpdateTableFilter(String),
     UpdateTables,
-    SetTables(BusinessTables, Vec<BTableGeneralInfo>),
+    SetTables(BusinessTables),
     ShowOrRemoveCreateTableForm,
     GetSingleTableInfo(String),
     SetSingleTableInfo(BTableInfo),
@@ -16,7 +16,7 @@ pub enum TablesMessage {
     SingleTableInfo(TableInfoMessage),
     CreateTableForm(CreateTableFormMessage),
     InitializeComponent,
-    ComponentInitialized(BusinessTables, Vec<BTableGeneralInfo>),
+    ComponentInitialized(BusinessTables),
     RequestDeleteTable(String),
     ConfirmDeleteTable,
     CancelDeleteTable,

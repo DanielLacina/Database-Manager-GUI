@@ -10,6 +10,7 @@ pub struct Tables {
     repository: Arc<BRepository>,
     pub tables: Option<Vec<BTable>>,
     pub table_info: Option<TableInfo>,
+    pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
 }
 
 impl BusinessComponent for Tables {
@@ -24,11 +25,12 @@ impl Tables {
             repository,
             tables: None,
             table_info: None,
+            tables_general_info: None,
         }
     }
 
-    pub async fn get_general_tables_info(&self) -> Vec<BTableGeneralInfo> {
-        self.repository.get_general_tables_info().await.unwrap()
+    pub async fn set_general_tables_info(&mut self) {
+        self.tables_general_info = Some(self.repository.get_general_tables_info().await.unwrap());
     }
 
     pub async fn set_table_info(&mut self, table_name: String) {

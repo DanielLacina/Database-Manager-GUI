@@ -35,7 +35,6 @@ pub struct TablesUI {
     pub tables: BusinessTables,
     pub single_table_info: Option<TableInfoUI>,
     pub table_to_delete: Option<String>,
-    pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
 }
 
 impl UIComponent for TablesUI {
@@ -103,7 +102,7 @@ impl UIComponent for TablesUI {
                                                // the table info ui component
                 self.single_table_info = Some(TableInfoUI::new(
                     table_info,
-                    self.tables_general_info.clone(),
+                    self.tables.tables_general_info.clone(),
                 ));
                 Task::none()
             }
@@ -136,22 +135,18 @@ impl UIComponent for TablesUI {
                 Task::perform(
                     async move {
                         tables.update_tables().await;
-                        let tables_general_info = tables.get_general_tables_info().await;
-
-                        (tables, tables_general_info)
+                        tables.set_general_tables_info().await;
+                        tables
                     },
-                    |(tables, tables_general_info)| {
-                        Self::EventType::message(Self::EventType::ComponentInitialized(
-                            tables,
-                            tables_general_info,
-                        ))
+                    |tables| {
+                        Self::EventType::message(Self::EventType::ComponentInitialized(tables))
                     },
                 )
             }
-            Self::EventType::ComponentInitialized(tables, tables_general_info) => {
+            Self::EventType::ComponentInitialized(tables) => {
                 self.tables = tables;
-                self.create_table_form.tables_general_info = Some(tables_general_info.clone());
-                self.tables_general_info = Some(tables_general_info);
+                self.create_table_form.tables_general_info =
+                    self.tables.tables_general_info.clone();
                 Task::none()
             }
             Self::EventType::ConfirmDeleteTable => {
@@ -166,19 +161,12 @@ impl UIComponent for TablesUI {
 
                     Task::perform(
                         async move {
-                            let read_tables = tables.clone();
-                            let (tables_result, tables_general_info) = join!(
-                                tables.delete_table(table_to_delete),
-                                read_tables.get_general_tables_info()
-                            );
-                            (tables, tables_general_info)
+                            tables.delete_table(table_to_delete).await;
+                            tables.set_general_tables_info().await;
+
+                            tables
                         },
-                        |(tables, tables_general_info)| {
-                            Self::EventType::message(Self::EventType::SetTables(
-                                tables,
-                                tables_general_info,
-                            ))
-                        },
+                        |tables| Self::EventType::message(Self::EventType::SetTables(tables)),
                     )
                 } else {
                     Task::none()
@@ -193,23 +181,19 @@ impl UIComponent for TablesUI {
                 Task::perform(
                     async move {
                         tables.update_tables().await;
-                        let tables_general_info = tables.get_general_tables_info().await;
+                        tables.set_general_tables_info().await;
 
-                        (tables, tables_general_info)
+                        tables
                     },
-                    |(tables, tables_general_info)| {
-                        Self::EventType::message(Self::EventType::SetTables(
-                            tables,
-                            tables_general_info,
-                        ))
-                    },
+                    |tables| Self::EventType::message(Self::EventType::SetTables(tables)),
                 )
             }
-            Self::EventType::SetTables(tables, tables_general_info) => {
+            Self::EventType::SetTables(tables) => {
                 self.tables = tables;
-                self.create_table_form.tables_general_info = Some(tables_general_info.clone());
+                self.create_table_form.tables_general_info =
+                    self.tables.tables_general_info.clone();
                 if let Some(single_table_info) = &mut self.single_table_info {
-                    single_table_info.tables_general_info = Some(tables_general_info);
+                    single_table_info.tables_general_info = self.tables.tables_general_info.clone();
                 }
                 Task::none()
             }
@@ -226,7 +210,6 @@ impl TablesUI {
             tables,
             single_table_info: None,
             table_to_delete: None,
-            tables_general_info: None,
         }
     }
 

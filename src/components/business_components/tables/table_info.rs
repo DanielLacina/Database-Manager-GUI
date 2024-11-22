@@ -249,6 +249,12 @@ impl TableInfo {
     fn handle_add_foreign_key(&mut self, column_foreign_key: BColumnForeignKey) {
         // only one foreign key allowed
         if let Some(existing_event_index) =
+            self.find_existing_add_foreign_key_event(&column_foreign_key.column_name)
+        {
+            self.table_change_events.remove(existing_event_index);
+            self.table_change_events
+                .push(BTableChangeEvents::AddForeignKey(column_foreign_key));
+        } else if let Some(existing_event_index) =
             self.find_existing_remove_foreign_key_event(&column_foreign_key.column_name)
         {
             self.table_change_events.remove(existing_event_index);
