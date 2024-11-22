@@ -8,7 +8,7 @@ pub enum HomeMessage {
 }
 
 impl Event for HomeMessage {
-    fn message(event: Self) -> Message {
-        Message::Home(event)
+    fn message(self) -> Message {
+        Message::Home(self)
     }
 }

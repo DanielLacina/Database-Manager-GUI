@@ -8,7 +8,7 @@ use crate::components::ui_components::{component::Event, events::Message};
 pub enum TablesMessage {
     UpdateTableFilter(String),
     UpdateTables,
-    SetTables(BusinessTables, Vec<BTableGeneralInfo>),
+    SetTables(BusinessTables),
     ShowOrRemoveCreateTableForm,
     GetSingleTableInfo(String),
     SetSingleTableInfo(BTableInfo),
@@ -16,15 +16,15 @@ pub enum TablesMessage {
     SingleTableInfo(TableInfoMessage),
     CreateTableForm(CreateTableFormMessage),
     InitializeComponent,
-    ComponentInitialized(BusinessTables, Vec<BTableGeneralInfo>),
+    ComponentInitialized(BusinessTables),
     RequestDeleteTable(String),
     ConfirmDeleteTable,
     CancelDeleteTable,
 }
 
 impl Event for TablesMessage {
-    fn message(event: Self) -> Message {
-        Message::Tables(event)
+    fn message(self) -> Message {
+        Message::Tables(self)
     }
 }
 
@@ -46,8 +46,8 @@ pub enum CreateTableFormMessage {
 }
 
 impl Event for CreateTableFormMessage {
-    fn message(event: Self) -> Message {
-        TablesMessage::message(TablesMessage::CreateTableForm(event))
+    fn message(self) -> Message {
+        TablesMessage::message(TablesMessage::CreateTableForm(self))
     }
 }
 
@@ -60,10 +60,14 @@ pub enum TableInfoMessage {
     UpdateTableName(String),
     SubmitUpdateTable,
     UpdateTableInfo(BTableInfo),
+    ToggleForeignKeyDropdown(usize),
+    ToggleForeignKeyTable(usize, String),
+    AddForeignKey(usize, String, String),
+    RemoveForeignKey(usize),
 }
 
 impl Event for TableInfoMessage {
-    fn message(event: Self) -> Message {
-        TablesMessage::message(TablesMessage::SingleTableInfo(event))
+    fn message(self) -> Message {
+        TablesMessage::message(TablesMessage::SingleTableInfo(self))
     }
 }

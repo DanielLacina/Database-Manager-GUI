@@ -10,6 +10,7 @@ pub struct Tables {
     repository: Arc<BRepository>,
     pub tables: Option<Vec<BTable>>,
     pub table_info: Option<TableInfo>,
+    pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
 }
 
 impl BusinessComponent for Tables {
@@ -24,11 +25,12 @@ impl Tables {
             repository,
             tables: None,
             table_info: None,
+            tables_general_info: None,
         }
     }
 
-    pub async fn get_general_tables_info(&self) -> Vec<BTableGeneralInfo> {
-        self.repository.get_general_tables_info().await.unwrap()
+    pub async fn set_general_tables_info(&mut self) {
+        self.tables_general_info = Some(self.repository.get_general_tables_info().await.unwrap());
     }
 
     pub async fn set_table_info(&mut self, table_name: String) {
@@ -185,8 +187,8 @@ mod tests {
     #[sqlx::test]
     async fn test_get_general_table_info(pool: PgPool) {
         let table_in = default_table_in();
-        let tables = initialized_tables_component(pool, &table_in).await;
-        let general_table_info = tables.get_general_tables_info().await;
+        let mut tables = initialized_tables_component(pool, &table_in).await;
+        tables.set_general_tables_info().await;
         let expected_general_table_info = vec![BTableGeneralInfo {
             table_name: table_in.table_name,
             column_names: table_in
@@ -200,6 +202,9 @@ mod tests {
                 .map(|column| column.datatype.to_string().to_lowercase())
                 .collect(),
         }];
-        assert_eq!(general_table_info, expected_general_table_info)
+        assert_eq!(
+            tables.tables_general_info,
+            Some(expected_general_table_info)
+        )
     }
 }

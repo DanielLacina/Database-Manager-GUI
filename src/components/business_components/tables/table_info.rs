@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
-    BTableChangeEvents, BTableIn, BusinessComponent,
+    repository_module::BRepository, BColumn, BColumnForeignKey, BColumnsInfo, BConstraint,
+    BDataType, BTable, BTableChangeEvents, BTableIn, BusinessComponent,
 };
 use std::sync::Arc;
 
@@ -62,8 +62,8 @@ impl TableInfo {
             BTableChangeEvents::AddColumn(column_name, data_type) => {
                 self.handle_add_column(column_name, data_type);
             }
-            BTableChangeEvents::AddForeignKey(column_name, referenced_table, referenced_column) => {
-                self.handle_add_foreign_key(column_name, referenced_table, referenced_column);
+            BTableChangeEvents::AddForeignKey(column_foreign_key) => {
+                self.handle_add_foreign_key(column_foreign_key);
             }
             BTableChangeEvents::RemoveForeignKey(column_name) => {
                 self.handle_remove_foreign_key(column_name);
@@ -194,6 +194,12 @@ impl TableInfo {
     }
 
     fn handle_remove_column(&mut self, column_name: String) {
+        if let Some(existing_event_index) = self.find_existing_add_primary_key_event(&column_name) {
+            self.table_change_events.remove(existing_event_index);
+        }
+        if let Some(existing_event_index) = self.find_existing_add_foreign_key_event(&column_name) {
+            self.table_change_events.remove(existing_event_index);
+        }
         if let Some(existing_event_index) = self.find_existing_add_column_event(&column_name) {
             self.table_change_events.remove(existing_event_index);
         } else if let Some(existing_event_index) =
@@ -240,23 +246,21 @@ impl TableInfo {
         }
     }
 
-    fn handle_add_foreign_key(
-        &mut self,
-        column_name: String,
-        referenced_table: String,
-        referenced_column: String,
-    ) {
+    fn handle_add_foreign_key(&mut self, column_foreign_key: BColumnForeignKey) {
+        // only one foreign key allowed
         if let Some(existing_event_index) =
-            self.find_existing_remove_foreign_key_event(&column_name)
+            self.find_existing_add_foreign_key_event(&column_foreign_key.column_name)
+        {
+            self.table_change_events.remove(existing_event_index);
+            self.table_change_events
+                .push(BTableChangeEvents::AddForeignKey(column_foreign_key));
+        } else if let Some(existing_event_index) =
+            self.find_existing_remove_foreign_key_event(&column_foreign_key.column_name)
         {
             self.table_change_events.remove(existing_event_index);
         } else {
             self.table_change_events
-                .push(BTableChangeEvents::AddForeignKey(
-                    column_name,
-                    referenced_table,
-                    referenced_column,
-                ));
+                .push(BTableChangeEvents::AddForeignKey(column_foreign_key));
         }
     }
 
@@ -329,8 +333,8 @@ impl TableInfo {
 
     fn find_existing_add_foreign_key_event(&self, column_name: &str) -> Option<usize> {
         self.table_change_events.iter().position(|event| {
-            matches!(event, BTableChangeEvents::AddForeignKey(existing_column_name, _, _)
-                if existing_column_name == column_name)
+            matches!(event, BTableChangeEvents::AddForeignKey(existing_column_foreign_key)
+                if  existing_column_foreign_key.column_name == column_name)
         })
     }
 
@@ -467,10 +471,10 @@ mod tests {
             // 9. Rename the column "created_at" to "regiStringation_date"
             BTableChangeEvents::ChangeColumnName(
                 String::from("created_at"),
-                String::from("regiStringation_date"),
+                String::from("registration_date"),
             ),
             // 10. Remove the column "regiStringation_date"
-            BTableChangeEvents::RemoveColumn(String::from("regiStringation_date")),
+            BTableChangeEvents::RemoveColumn(String::from("registration_date")),
             // 11. Add a new column "is_active" with datatype BOOLEAN
             BTableChangeEvents::AddColumn(String::from("is_active"), BDataType::TEXT),
             // 12. Rename the column "is_active" to "active_status"
@@ -491,6 +495,7 @@ mod tests {
             BTableChangeEvents::ChangeTableName(String::from("clients")),
             // 17. Add a new column "phone_number" with datatype TEXT
             BTableChangeEvents::AddColumn(String::from("phone_number"), BDataType::TEXT),
+            BTableChangeEvents::AddPrimaryKey(String::from("phone_number")),
             // 18. Remove the column "phone_number"
             BTableChangeEvents::RemoveColumn(String::from("phone_number")),
             // 19. Change the datatype of the column "country" from TEXT to TEXT

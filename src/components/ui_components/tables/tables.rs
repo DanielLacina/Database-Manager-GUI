@@ -1,5 +1,7 @@
 use crate::components::business_components::{
-    component::{BColumn, BConstraint, BDataType, BTable, BTableIn, BusinessComponent},
+    component::{
+        BColumn, BConstraint, BDataType, BTable, BTableGeneralInfo, BTableIn, BusinessComponent,
+    },
     components::BusinessTables,
 };
 use crate::components::ui_components::{
@@ -13,7 +15,7 @@ use crate::components::ui_components::{
 };
 use iced::{
     alignment,
-    alignment::Vertical,
+    alignment::{Alignment, Vertical},
     border::Radius,
     futures::join,
     widget::{
@@ -23,6 +25,7 @@ use iced::{
     Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
 use regex::Regex;
+use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct TablesUI {
@@ -97,7 +100,10 @@ impl UIComponent for TablesUI {
             Self::EventType::SetSingleTableInfo(table_info) => {
                 self.tables.table_info = None; // object is no longer needed becasue logic is in
                                                // the table info ui component
-                self.single_table_info = Some(TableInfoUI::new(table_info));
+                self.single_table_info = Some(TableInfoUI::new(
+                    table_info,
+                    self.tables.tables_general_info.clone(),
+                ));
                 Task::none()
             }
             Self::EventType::UndisplayTableInfo => {
@@ -129,21 +135,18 @@ impl UIComponent for TablesUI {
                 Task::perform(
                     async move {
                         tables.update_tables().await;
-                        let tables_general_info = tables.get_general_tables_info().await;
-
-                        (tables, tables_general_info)
+                        tables.set_general_tables_info().await;
+                        tables
                     },
-                    |(tables, tables_general_info)| {
-                        Self::EventType::message(Self::EventType::ComponentInitialized(
-                            tables,
-                            tables_general_info,
-                        ))
+                    |tables| {
+                        Self::EventType::message(Self::EventType::ComponentInitialized(tables))
                     },
                 )
             }
-            Self::EventType::ComponentInitialized(tables, tables_general_info) => {
+            Self::EventType::ComponentInitialized(tables) => {
                 self.tables = tables;
-                self.create_table_form.tables_general_info = Some(tables_general_info);
+                self.create_table_form.tables_general_info =
+                    self.tables.tables_general_info.clone();
                 Task::none()
             }
             Self::EventType::ConfirmDeleteTable => {
@@ -158,19 +161,12 @@ impl UIComponent for TablesUI {
 
                     Task::perform(
                         async move {
-                            let read_tables = tables.clone();
-                            let (tables_result, tables_general_info) = join!(
-                                tables.delete_table(table_to_delete),
-                                read_tables.get_general_tables_info()
-                            );
-                            (tables, tables_general_info)
+                            tables.delete_table(table_to_delete).await;
+                            tables.set_general_tables_info().await;
+
+                            tables
                         },
-                        |(tables, tables_general_info)| {
-                            Self::EventType::message(Self::EventType::SetTables(
-                                tables,
-                                tables_general_info,
-                            ))
-                        },
+                        |tables| Self::EventType::message(Self::EventType::SetTables(tables)),
                     )
                 } else {
                     Task::none()
@@ -185,21 +181,20 @@ impl UIComponent for TablesUI {
                 Task::perform(
                     async move {
                         tables.update_tables().await;
-                        let tables_general_info = tables.get_general_tables_info().await;
+                        tables.set_general_tables_info().await;
 
-                        (tables, tables_general_info)
+                        tables
                     },
-                    |(tables, tables_general_info)| {
-                        Self::EventType::message(Self::EventType::SetTables(
-                            tables,
-                            tables_general_info,
-                        ))
-                    },
+                    |tables| Self::EventType::message(Self::EventType::SetTables(tables)),
                 )
             }
-            Self::EventType::SetTables(tables, tables_general_info) => {
+            Self::EventType::SetTables(tables) => {
                 self.tables = tables;
-                self.create_table_form.tables_general_info = Some(tables_general_info);
+                self.create_table_form.tables_general_info =
+                    self.tables.tables_general_info.clone();
+                if let Some(single_table_info) = &mut self.single_table_info {
+                    single_table_info.tables_general_info = self.tables.tables_general_info.clone();
+                }
                 Task::none()
             }
         }
@@ -237,9 +232,7 @@ impl TablesUI {
 
             let undisplay_button = button("🔙 Back")
                 .style(|_, _| button_style())
-                .on_press(<TablesUI as UIComponent>::EventType::message(
-                    <TablesUI as UIComponent>::EventType::UndisplayTableInfo,
-                ))
+                .on_press(<TablesUI as UIComponent>::EventType::UndisplayTableInfo.message())
                 .padding(10);
 
             table_info_section = table_info_section.push(undisplay_button);
@@ -276,9 +269,7 @@ impl TablesUI {
             "Show create table form"
         })
         .style(|_, _| button_style())
-        .on_press(<TablesUI as UIComponent>::EventType::message(
-            <TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm,
-        ))
+        .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm.message())
         .padding(10);
 
         Column::new()
@@ -327,15 +318,11 @@ impl TablesUI {
     }
     fn delete_table_confirmation_modal<'a>(&'a self) -> Element<'a, Message> {
         let confirm_button = Button::new(text("Yes, delete"))
-            .on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::ConfirmDeleteTable,
-            ))
+            .on_press(<TablesUI as UIComponent>::EventType::ConfirmDeleteTable.message())
             .style(|_, _| delete_button_style());
 
-        let cancel_button =
-            Button::new(text("Cancel")).on_press(<TablesUI as UIComponent>::EventType::message(
-                <TablesUI as UIComponent>::EventType::CancelDeleteTable,
-            ));
+        let cancel_button = Button::new(text("Cancel"))
+            .on_press(<TablesUI as UIComponent>::EventType::CancelDeleteTable.message());
 
         let modal_content = container(
             Column::new()

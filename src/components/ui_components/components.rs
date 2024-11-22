@@ -19,8 +19,8 @@ pub enum ComponentsMessage {
 }
 
 impl Event for ComponentsMessage {
-    fn message(event: Self) -> Message {
-        Message::Components(event)
+    fn message(self) -> Message {
+        Message::Components(self)
     }
 }
 
@@ -66,8 +66,7 @@ impl UIComponents {
     }
 
     pub fn initialize_startup_components_message() -> Task<Message> {
-        Task::done(HomeMessage::message(HomeMessage::InitializeComponent)).chain(Task::done(
-            TablesMessage::message(TablesMessage::InitializeComponent),
-        ))
+        Task::done(HomeMessage::InitializeComponent.message())
+            .chain(Task::done(TablesMessage::InitializeComponent.message()))
     }
 }

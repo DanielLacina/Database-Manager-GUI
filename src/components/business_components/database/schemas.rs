@@ -110,13 +110,20 @@ pub struct TableIn {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ColumnForeignKey {
+    pub column_name: String,
+    pub referenced_column: String,
+    pub referenced_table: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TableChangeEvents {
     ChangeTableName(String),
     ChangeColumnDataType(String, DataType),
     ChangeColumnName(String, String),
     AddColumn(String, DataType),
     RemoveColumn(String),
-    AddForeignKey(String, String, String),
+    AddForeignKey(ColumnForeignKey),
     RemoveForeignKey(String),
     AddPrimaryKey(String),
     RemovePrimaryKey(String),

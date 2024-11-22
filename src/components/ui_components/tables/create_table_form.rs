@@ -74,7 +74,6 @@ impl UIComponent for CreateTableFormUI {
                 referenced_column_name,
             ) => {
                 if let Some(column) = self.create_table_input.columns.get_mut(index) {
-                    // Find the index of the existing foreign key constraint
                     if let Some(existing_index) = column.constraints.iter().position(|constraint| {
                         matches!(
                             constraint,
@@ -95,6 +94,7 @@ impl UIComponent for CreateTableFormUI {
                         ));
                     }
                 }
+
                 self.active_foreign_key_dropdown_column = None;
                 self.active_foreign_key_table_within_dropdown = None;
                 Task::none()
@@ -187,9 +187,7 @@ impl CreateTableFormUI {
 
         let add_column_button = button("➕ Add Column")
             .style(|_, _| button_style())
-            .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
-                <CreateTableFormUI as UIComponent>::EventType::AddColumn,
-            ))
+            .on_press(<CreateTableFormUI as UIComponent>::EventType::AddColumn.message())
             .padding(10);
         form = form.push(add_column_button);
 
