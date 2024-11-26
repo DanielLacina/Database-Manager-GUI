@@ -17,32 +17,32 @@ use iced::{
     Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
 use std::iter::zip;
-use std::sync::Arc;
 
 pub trait ForeignKeyDropdownEvents {
     fn add_foreign_key(
+        &self,
         index: usize,
         referenced_table_name: String,
         referenced_column_name: String,
     ) -> Message;
-    fn remove_foreign_key(index: usize) -> Message;
-    fn toggle_foreign_key_table(index: usize, table_name: String) -> Message;
+    fn remove_foreign_key(&self, index: usize) -> Message;
+    fn toggle_foreign_key_table(&self, index: usize, table_name: String) -> Message;
 }
 
 #[derive(Debug, Clone)]
-pub struct ForeignKeyDropDownUI {
+pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
     pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
     pub active_foreign_key_table_within_dropdown: Option<String>,
     pub column: BColumn,
-    pub events: Arc<dyn ForeignKeyDropdownEvents>,
+    pub events: T,
     pub index: usize,
 }
 
-impl ForeignKeyDropDownUI {
+impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
     pub fn new(
         column: BColumn,
         tables_general_info: Option<Vec<BTableGeneralInfo>>,
-        events: Arc<dyn ForeignKeyDropdownEvents>,
+        events: T,
         active_foreign_key_table_within_dropdown: Option<String>,
         index: usize,
     ) -> Self {
@@ -83,7 +83,7 @@ impl ForeignKeyDropDownUI {
             .style(|_, _| table_button_style())
             .on_press(
                 self.events
-                    .toggle_foreign_key_table(table.table_name.clone()),
+                    .toggle_foreign_key_table(self.index.clone(), table.table_name.clone()),
             );
 
         if self.active_foreign_key_table_within_dropdown == Some(table.table_name.clone()) {
@@ -109,8 +109,11 @@ impl ForeignKeyDropDownUI {
             .collect();
         let selected: Option<String> = None;
         PickList::new(options, selected, move |column_name| {
-            self.events
-                .add_foreign_key(table.table_name.clone(), column_name.clone())
+            self.events.add_foreign_key(
+                self.index.clone(),
+                table.table_name.clone(),
+                column_name.clone(),
+            )
         })
         .into()
     }
@@ -118,7 +121,7 @@ impl ForeignKeyDropDownUI {
     fn remove_foreign_key_button(&self) -> Button<'_, Message> {
         button("Remove Foreign Key")
             .style(|_, _| delete_button_style())
-            .on_press(self.events.remove_foreign_key())
+            .on_press(self.events.remove_foreign_key(self.index.clone()))
     }
 }
 

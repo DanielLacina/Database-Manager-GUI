@@ -20,10 +20,12 @@ use iced::{
 use std::iter::zip;
 use std::sync::Arc;
 
-pub struct CreateTableFormForeignKeyDropdown;
+#[derive(Debug, Clone)]
+pub struct CreateTableFormForeignKeyDropdownEvents;
 
-impl ForeignKeyDropdownEvents for CreateTableFormForeignKeyDropdown {
+impl ForeignKeyDropdownEvents for CreateTableFormForeignKeyDropdownEvents {
     fn add_foreign_key(
+        &self,
         index: usize,
         referenced_table_name: String,
         referenced_column_name: String,
@@ -31,10 +33,10 @@ impl ForeignKeyDropdownEvents for CreateTableFormForeignKeyDropdown {
         CreateTableFormMessage::AddForeignKey(index, referenced_table_name, referenced_column_name)
             .message()
     }
-    fn remove_foreign_key(index: usize) -> Message {
+    fn remove_foreign_key(&self, index: usize) -> Message {
         CreateTableFormMessage::RemoveForeignKey(index).message()
     }
-    fn toggle_foreign_key_table(index: usize, table_name: String) -> Message {
+    fn toggle_foreign_key_table(&self, index: usize, table_name: String) -> Message {
         CreateTableFormMessage::ToggleForeignKeyTable(index, table_name).message()
     }
 }
@@ -43,8 +45,9 @@ impl ForeignKeyDropdownEvents for CreateTableFormForeignKeyDropdown {
 pub struct CreateTableFormUI {
     create_table_input: BTableIn,
     pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
-    active_foreign_key_dropdown: Option<ForeignKeyDropDownUI>, // column index that wants the foreign key dropdown
-                                                               // activated
+    active_foreign_key_dropdown:
+        Option<ForeignKeyDropDownUI<CreateTableFormForeignKeyDropdownEvents>>, // column index that wants the foreign key dropdown
+                                                                               // activated
 }
 
 impl UIComponent for CreateTableFormUI {
@@ -160,7 +163,7 @@ impl UIComponent for CreateTableFormUI {
                     self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
                         column.clone(),
                         self.tables_general_info.clone(),
-                        Arc::new(CreateTableFormForeignKeyDropdown),
+                        CreateTableFormForeignKeyDropdownEvents,
                         None,
                         index,
                     ));
