@@ -160,13 +160,27 @@ impl UIComponent for CreateTableFormUI {
             Self::EventType::ToggleForeignKeyDropdown(index) => {
                 // Toggle the dropdown for the specified column
                 if let Some(column) = self.create_table_input.columns.get(index) {
-                    self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
-                        column.clone(),
-                        self.tables_general_info.clone(),
-                        CreateTableFormForeignKeyDropdownEvents,
-                        None,
-                        index,
-                    ));
+                    if let Some(foreign_key_dropdown) = &self.active_foreign_key_dropdown {
+                        if foreign_key_dropdown.index == index {
+                            self.active_foreign_key_dropdown = None
+                        } else {
+                            self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
+                                column.clone(),
+                                self.tables_general_info.clone(),
+                                CreateTableFormForeignKeyDropdownEvents,
+                                None,
+                                index,
+                            ));
+                        }
+                    } else {
+                        self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
+                            column.clone(),
+                            self.tables_general_info.clone(),
+                            CreateTableFormForeignKeyDropdownEvents,
+                            None,
+                            index,
+                        ));
+                    }
                 }
                 Task::none()
             }
@@ -213,7 +227,7 @@ impl CreateTableFormUI {
             .padding(10);
         form = form.push(add_column_button);
 
-        let create_table_button = button("🛠️ Create Table")
+        let create_table_button = button("📋 Create Table")
             .style(|_, _| create_button_style())
             .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
                 <CreateTableFormUI as UIComponent>::EventType::SubmitCreateTable(
@@ -235,7 +249,7 @@ impl CreateTableFormUI {
     }
 
     fn table_name_input<'a>(&'a self) -> Element<'a, Message> {
-        text_input("Enter Table Name", &self.create_table_input.table_name)
+        text_input("📋 Enter Table Name", &self.create_table_input.table_name)
             .on_input(|value| {
                 <CreateTableFormUI as UIComponent>::EventType::message(
                     <CreateTableFormUI as UIComponent>::EventType::UpdateTableName(value),
@@ -263,7 +277,7 @@ impl CreateTableFormUI {
 
     fn column_input_row<'a>(&'a self, index: usize, column: &'a BColumn) -> Element<'a, Message> {
         // Column name input
-        let name_input = text_input("Column Name", &column.name)
+        let name_input = text_input("📝 Column Name", &column.name)
             .on_input(move |value| {
                 <CreateTableFormUI as UIComponent>::EventType::message(
                     <CreateTableFormUI as UIComponent>::EventType::UpdateColumnName(index, value),
@@ -286,7 +300,7 @@ impl CreateTableFormUI {
 
         // Primary key checkbox
         let primary_key_checkbox = checkbox(
-            "Primary Key",
+            "🔑 Primary Key",
             column.constraints.contains(&BConstraint::PrimaryKey),
         )
         .on_toggle(move |_| {
@@ -297,7 +311,7 @@ impl CreateTableFormUI {
 
         // Foreign key dropdown
         let foreign_key_dropdown = self.render_foreign_key_button(index, &column);
-        let remove_button = button("Remove")
+        let remove_button = button("❌ Remove")
             .style(|_, _| delete_button_style())
             .on_press(<CreateTableFormUI as UIComponent>::EventType::message(
                 <CreateTableFormUI as UIComponent>::EventType::RemoveColumn(index),
@@ -316,6 +330,7 @@ impl CreateTableFormUI {
         .align_y(Vertical::Center)
         .into()
     }
+
     fn render_foreign_key_button<'a>(
         &'a self,
         index: usize,
@@ -331,14 +346,14 @@ impl CreateTableFormUI {
                 foreign_key_constraint
             {
                 text(format!(
-                    "{}.{}",
+                    "🔗 {}.{}",
                     referenced_table_name, referenced_column_name
                 ))
             } else {
-                text("Set Foreign Key")
+                text("➕ Set Foreign Key")
             }
         } else {
-            text("Set Foreign Key")
+            text("➕ Set Foreign Key")
         };
 
         let button = button(button_text).style(|_, _| button_style()).on_press(

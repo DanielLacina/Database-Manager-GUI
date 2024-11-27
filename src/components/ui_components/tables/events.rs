@@ -64,6 +64,7 @@ pub enum TableInfoMessage {
     ToggleForeignKeyTable(usize, String),
     AddForeignKey(usize, String, String),
     RemoveForeignKey(usize),
+    SetOrRemovePrimaryKey(usize),
 }
 
 impl Event for TableInfoMessage {

@@ -17,8 +17,8 @@ use iced::{
     border::Radius,
     font::Font,
     widget::{
-        button, column, container, row, scrollable, text, text_input, Button, Column, PickList,
-        Row, Scrollable, Text, TextInput,
+        button, checkbox, column, container, row, scrollable, text, text_input, Button, Column,
+        PickList, Row, Scrollable, Text, TextInput,
     },
     Alignment, Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
@@ -201,15 +201,53 @@ impl UIComponent for TableInfoUI {
                     self.formated_table_change_events(),
                 )))
             }
+            Self::EventType::SetOrRemovePrimaryKey(index) => {
+                if let Some(column) = self.columns_display.get_mut(index) {
+                    if let Some(existing_index) = column
+                        .constraints
+                        .iter()
+                        .position(|constraint| matches!(constraint, BConstraint::PrimaryKey))
+                    {
+                        column.constraints.remove(existing_index);
+                        self.table_info.add_table_change_event(
+                            BTableChangeEvents::RemovePrimaryKey(column.name.clone()),
+                        );
+                    } else {
+                        column.constraints.push(BConstraint::PrimaryKey);
+                        self.table_info
+                            .add_table_change_event(BTableChangeEvents::AddPrimaryKey(
+                                column.name.clone(),
+                            ));
+                    }
+                }
+                Task::done(ConsoleMessage::message(ConsoleMessage::LogMessage(
+                    self.formated_table_change_events(),
+                )))
+            }
+
             Self::EventType::ToggleForeignKeyDropdown(index) => {
                 if let Some(column) = self.columns_display.get(index) {
-                    self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
-                        column.clone(),
-                        self.tables_general_info.clone(),
-                        TableInfoForeignKeyDropdown,
-                        None,
-                        index,
-                    ));
+                    if let Some(foreign_key_dropdown) = &self.active_foreign_key_dropdown {
+                        if foreign_key_dropdown.index == index {
+                            self.active_foreign_key_dropdown = None;
+                        } else {
+                            self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
+                                column.clone(),
+                                self.tables_general_info.clone(),
+                                TableInfoForeignKeyDropdown,
+                                None,
+                                index,
+                            ));
+                        }
+                    } else {
+                        self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
+                            column.clone(),
+                            self.tables_general_info.clone(),
+                            TableInfoForeignKeyDropdown,
+                            None,
+                            index,
+                        ));
+                    }
                 }
                 Task::none()
             }
@@ -321,6 +359,7 @@ impl TableInfoUI {
             .spacing(20)
             .push(self.column_name_input(index, &column_info.name))
             .push(self.data_type_picker(index, &column_info.datatype))
+            .push(self.primary_key_checkbox(index, &column_info))
             .push(self.render_foreign_key_button(index, &column_info))
             .push(self.remove_column_button(index))
             .width(Length::Fill)
@@ -338,10 +377,25 @@ impl TableInfoUI {
         PickList::new(
             vec![BDataType::TEXT, BDataType::INTEGER, BDataType::TIMESTAMP],
             Some(datatype.clone()),
-            move |value| TableInfoMessage::UpdateColumnType(index, value).message(),
+            move |value| {
+                <TableInfoUI as UIComponent>::EventType::UpdateColumnType(index, value).message()
+            },
         )
         .width(Length::FillPortion(1))
         .padding(5)
+        .into()
+    }
+
+    fn primary_key_checkbox<'a>(&'a self, index: usize, column: &BColumn) -> Element<'a, Message> {
+        checkbox(
+            "Primary Key",
+            column.constraints.contains(&BConstraint::PrimaryKey),
+        )
+        .on_toggle(move |_| {
+            <TableInfoUI as UIComponent>::EventType::message(
+                <TableInfoUI as UIComponent>::EventType::SetOrRemovePrimaryKey(index),
+            )
+        })
         .into()
     }
 
