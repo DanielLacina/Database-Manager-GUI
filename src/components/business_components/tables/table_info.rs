@@ -169,27 +169,34 @@ impl TableInfo {
     }
 
     fn handle_change_column_name(&mut self, column_name: String, new_column_name: String) {
-        self.rename_existing_datatype_change_event(&column_name, &new_column_name);
-
-        if column_name == new_column_name {
+        if column_name.clone() == new_column_name {
             return;
-        } else if let Some(existing_event_index) =
-            self.find_existing_rename_column_event(&column_name)
+        }
+        self.rename_existing_datatype_change_event(&column_name.clone(), &new_column_name);
+        if let Some(existing_event_index) =
+            self.find_existing_rename_column_event(&column_name.clone())
         {
-            self.update_existing_rename_event(existing_event_index, new_column_name);
-        } else if let Some(existing_event_index) = self.find_existing_add_column_event(&column_name)
+            self.update_existing_rename_event(existing_event_index, new_column_name.clone());
+        } else if let Some(existing_event_index) =
+            self.find_existing_add_column_event(&column_name.clone())
         {
             self.update_existing_add_column_event(
                 existing_event_index,
-                column_name,
-                new_column_name,
+                column_name.clone(),
+                new_column_name.clone(),
             );
         } else {
             self.table_change_events
                 .push(BTableChangeEvents::ChangeColumnName(
-                    column_name,
-                    new_column_name,
+                    column_name.clone(),
+                    new_column_name.clone(),
                 ));
+        }
+
+        if let Some(existing_event_index) = self.find_existing_add_primary_key_event(&column_name) {
+            self.table_change_events.remove(existing_event_index);
+            self.table_change_events
+                .push(BTableChangeEvents::AddPrimaryKey(new_column_name.clone()));
         }
     }
 
@@ -381,9 +388,24 @@ impl TableInfo {
 
     pub async fn alter_table(&mut self) {
         if !self.table_change_events.is_empty() {
+            let primary_key_column_names: Vec<String> = self
+                .columns_info
+                .iter()
+                .filter(|&column| {
+                    column
+                        .constraints
+                        .iter()
+                        .any(|constraint| matches!(constraint, BConstraint::PrimaryKey))
+                })
+                .map(|column| column.name.clone())
+                .collect();
             let res = self
                 .repository
-                .alter_table(&self.table_name, &self.table_change_events)
+                .alter_table(
+                    &self.table_name,
+                    &self.table_change_events,
+                    &primary_key_column_names,
+                )
                 .await;
             println!("Alter table result: {:?}", res);
         }
@@ -416,11 +438,18 @@ mod tests {
     fn default_table_in() -> BTableIn {
         BTableIn {
             table_name: String::from("users"),
-            columns: vec![BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-                constraints: vec![],
-            }],
+            columns: vec![
+                BColumn {
+                    name: String::from("id"),
+                    datatype: BDataType::INTEGER,
+                    constraints: vec![BConstraint::PrimaryKey],
+                },
+                BColumn {
+                    name: String::from("name"),
+                    datatype: BDataType::TEXT,
+                    constraints: vec![],
+                },
+            ],
         }
     }
 
@@ -435,20 +464,38 @@ mod tests {
     async fn test_initialize_component(pool: PgPool) {
         let table_in = default_table_in();
         let mut table_info = initialized_table_info(pool, &table_in).await;
-
-        assert_eq!(table_info.table_name, table_in.table_name);
-        assert_eq!(
-            table_info.columns_info,
-            vec![BColumn {
+        let mut expected_columns = vec![
+            BColumn {
+                name: String::from("id"),
+                datatype: BDataType::INTEGER,
+                constraints: vec![BConstraint::PrimaryKey],
+            },
+            BColumn {
                 constraints: vec![],
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
-            }]
-        );
+            },
+        ];
+        expected_columns.sort_by(|a, b| b.name.cmp(&a.name));
+        table_info.columns_info.sort_by(|a, b| b.name.cmp(&a.name));
+        assert_eq!(table_info.table_name, table_in.table_name);
+        assert_eq!(table_info.columns_info, expected_columns);
     }
 
     #[sqlx::test]
     async fn test_alter_table(pool: PgPool) {
+        let remote_table = BTableIn {
+            table_name: String::from("registrations"),
+            columns: vec![BColumn {
+                name: String::from("id"),
+                constraints: vec![BConstraint::PrimaryKey],
+                datatype: BDataType::INTEGER,
+            }],
+        };
+        BRepository::new(Some(pool.clone()))
+            .await
+            .create_table(&remote_table)
+            .await;
         let table_in = default_table_in();
         let mut table_info = initialized_table_info(pool, &table_in).await;
         let table_change_events = vec![
@@ -491,6 +538,8 @@ mod tests {
             ),
             // 15. Add a new column "country" with datatype TEXT
             BTableChangeEvents::AddColumn(String::from("country"), BDataType::TEXT),
+            BTableChangeEvents::AddPrimaryKey(String::from("country")),
+            BTableChangeEvents::ChangeColumnName(String::from("country"), String::from("region")),
             // 16. Change the table name from "customers" to "clients"
             BTableChangeEvents::ChangeTableName(String::from("clients")),
             // 17. Add a new column "phone_number" with datatype TEXT
@@ -499,9 +548,21 @@ mod tests {
             // 18. Remove the column "phone_number"
             BTableChangeEvents::RemoveColumn(String::from("phone_number")),
             // 19. Change the datatype of the column "country" from TEXT to TEXT
-            BTableChangeEvents::ChangeColumnDataType(String::from("country"), BDataType::TEXT),
+            BTableChangeEvents::ChangeColumnDataType(String::from("region"), BDataType::TEXT),
             // 20. Rename the column "username" back to "name"
             BTableChangeEvents::ChangeColumnName(String::from("username"), String::from("name")),
+            BTableChangeEvents::AddColumn(String::from("registration_id"), BDataType::INTEGER),
+            BTableChangeEvents::AddForeignKey(BColumnForeignKey {
+                column_name: String::from("registration_id"),
+                referenced_table: String::from("registrations"),
+                referenced_column: String::from("id"),
+            }),
+            BTableChangeEvents::RemoveForeignKey(String::from("registration_id")),
+            BTableChangeEvents::AddForeignKey(BColumnForeignKey {
+                column_name: String::from("registration_id"),
+                referenced_table: String::from("registrations"),
+                referenced_column: String::from("id"),
+            }),
         ];
         for event in table_change_events {
             table_info.add_table_change_event(event);
@@ -510,13 +571,25 @@ mod tests {
             BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
             BTableChangeEvents::AddColumn(String::from("active_status"), BDataType::TEXT),
             BTableChangeEvents::AddColumn(String::from("last_login"), BDataType::TIMESTAMP),
-            BTableChangeEvents::AddColumn(String::from("country"), BDataType::TEXT),
+            BTableChangeEvents::AddColumn(String::from("region"), BDataType::TEXT),
+            BTableChangeEvents::AddPrimaryKey(String::from("region")),
             BTableChangeEvents::ChangeTableName(String::from("clients")),
             BTableChangeEvents::ChangeColumnDataType(String::from("name"), BDataType::INTEGER),
+            BTableChangeEvents::AddColumn(String::from("registration_id"), BDataType::INTEGER),
+            BTableChangeEvents::AddForeignKey(BColumnForeignKey {
+                column_name: String::from("registration_id"),
+                referenced_table: String::from("registrations"),
+                referenced_column: String::from("id"),
+            }),
         ];
         assert_eq!(table_info.table_change_events, expected_events);
         table_info.alter_table().await;
         let mut expected_columns = vec![
+            BColumn {
+                constraints: vec![BConstraint::PrimaryKey],
+                name: String::from("id"),
+                datatype: BDataType::INTEGER,
+            },
             BColumn {
                 constraints: vec![],
                 name: String::from("name"),
@@ -538,9 +611,17 @@ mod tests {
                 datatype: BDataType::TIMESTAMP,
             },
             BColumn {
-                constraints: vec![],
-                name: String::from("country"),
+                constraints: vec![BConstraint::PrimaryKey],
+                name: String::from("region"),
                 datatype: BDataType::TEXT,
+            },
+            BColumn {
+                constraints: vec![BConstraint::ForeignKey(
+                    String::from("registrations"),
+                    String::from("id"),
+                )],
+                name: String::from("registration_id"),
+                datatype: BDataType::INTEGER,
             },
         ];
         expected_columns.sort_by(|a, b| b.name.cmp(&a.name));

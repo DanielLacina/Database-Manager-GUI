@@ -1,6 +1,6 @@
 use crate::components::business_components::database::{
     database::create_database_pool,
-    models::{ColumnsInfo, Table, TableGeneralInfo},
+    models::{ColumnsInfo, PrimaryKeyConstraint, Table, TableGeneralInfo},
     schemas::{ColumnForeignKey, Constraint, TableChangeEvents, TableIn},
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
@@ -20,7 +20,7 @@ impl Repository {
         }
     }
 
-    pub async fn get_tables(&self) -> Result<Vec<Table>, Box<sqlx::Error>> {
+    pub async fn get_tables(&self) -> Result<Vec<Table>, sqlx::Error> {
         let res = sqlx::query_as::<_, Table>(
             "SELECT table_name
       FROM information_schema.tables
@@ -28,12 +28,11 @@ impl Repository {
        AND table_type='BASE TABLE'",
         )
         .fetch_all(&self.pool)
-        .await
-        .unwrap();
-        Ok(res)
+        .await;
+        res
     }
 
-    pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, Box<sqlx::Error>> {
+    pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, sqlx::Error> {
         let res = sqlx::query_as::<_, TableGeneralInfo>(
             "SELECT
                     t.table_name,
@@ -52,15 +51,14 @@ impl Repository {
                     t.table_name",
         )
         .fetch_all(&self.pool)
-        .await
-        .unwrap();
-        Ok(res)
+        .await;
+        res
     }
 
     pub async fn get_columns_info(
         &self,
         table_name: &str,
-    ) -> Result<Vec<ColumnsInfo>, Box<sqlx::Error>> {
+    ) -> Result<Vec<ColumnsInfo>, sqlx::Error> {
         let res = sqlx::query_as::<_, ColumnsInfo>(
             "SELECT
                         c.column_name,
@@ -90,9 +88,24 @@ impl Repository {
         )
         .bind(&table_name)
         .fetch_all(&self.pool)
-        .await
-        .unwrap();
-        Ok(res)
+        .await;
+        res
+    }
+
+    pub async fn get_primary_key_constraint(
+        &self,
+        table_name: &str,
+    ) -> Result<Option<PrimaryKeyConstraint>, sqlx::Error> {
+        let res = sqlx::query_as::<_, PrimaryKeyConstraint>(
+            "SELECT c.conname
+                FROM pg_catalog.pg_constraint c
+                JOIN pg_class t ON t.oid = c.conrelid
+                WHERE t.relname = $1 AND c.contype ='p'",
+        )
+        .bind(table_name)
+        .fetch_optional(&self.pool)
+        .await;
+        res
     }
 
     pub async fn create_table(&self, table_in: &TableIn) {
@@ -160,78 +173,103 @@ impl Repository {
         &self,
         table_name: &str,
         table_change_events: &Vec<TableChangeEvents>,
+        initial_primary_key_column_names: &Vec<String>,
     ) -> Result<(), sqlx::Error> {
         // Begin a transaction
         let mut transaction: Transaction<'_, Postgres> = self.pool.begin().await?;
         let mut current_table_name = table_name.to_string();
 
-        // Collect changes and detect table rename
+        let mut primary_key_columns = initial_primary_key_column_names.clone();
+        let mut queries = Vec::new();
+
         for event in table_change_events {
-            let query = match event {
+            match event {
                 TableChangeEvents::ChangeTableName(new_name) => {
-                    let query = format!(
+                    queries.push(format!(
                         "ALTER TABLE \"{}\" RENAME TO \"{}\"",
                         current_table_name, new_name
-                    );
+                    ));
                     current_table_name = new_name.clone();
-                    query
                 }
                 TableChangeEvents::ChangeColumnDataType(column_name, new_data_type) => {
-                    format!(
+                    queries.push(format!(
                         "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {} USING \"{}\"::{}",
                         current_table_name, column_name, new_data_type, column_name, new_data_type
-                    )
+                    ));
                 }
                 TableChangeEvents::ChangeColumnName(old_name, new_name) => {
-                    format!(
+                    queries.push(format!(
                         "ALTER TABLE \"{}\" RENAME COLUMN \"{}\" TO \"{}\"",
                         current_table_name, old_name, new_name
-                    )
+                    ));
                 }
                 TableChangeEvents::AddColumn(column_name, data_type) => {
-                    format!(
+                    queries.push(format!(
                         "ALTER TABLE \"{}\" ADD COLUMN \"{}\" {}",
                         current_table_name, column_name, data_type
-                    )
+                    ));
                 }
                 TableChangeEvents::RemoveColumn(column_name) => {
-                    format!(
+                    queries.push(format!(
                         "ALTER TABLE \"{}\" DROP COLUMN \"{}\"",
                         current_table_name, column_name
-                    )
+                    ));
                 }
                 TableChangeEvents::AddForeignKey(column_foreign_key) => {
-                    format!(
+                    queries.push(format!(
                     "ALTER TABLE \"{}\" ADD CONSTRAINT fk_{}_{} FOREIGN KEY (\"{}\") REFERENCES \"{}\" (\"{}\")",
-                    current_table_name, current_table_name, column_foreign_key.column_name, column_foreign_key.column_name, column_foreign_key.referenced_table, column_foreign_key.referenced_column
-                )
+                    current_table_name, current_table_name, column_foreign_key.column_name,
+                    column_foreign_key.column_name, column_foreign_key.referenced_table,
+                    column_foreign_key.referenced_column
+                ));
                 }
                 TableChangeEvents::RemoveForeignKey(column_name) => {
-                    format!(
+                    queries.push(format!(
                         "ALTER TABLE \"{}\" DROP CONSTRAINT IF EXISTS fk_{}_{}",
                         current_table_name, current_table_name, column_name,
-                    )
+                    ));
                 }
                 TableChangeEvents::AddPrimaryKey(column_name) => {
-                    format!(
-                        "ALTER TABLE \"{}\" ADD CONSTRAINT pk_{}_{} PRIMARY KEY (\"{}\")",
-                        current_table_name, current_table_name, column_name, column_name
-                    )
+                    primary_key_columns.push(column_name.clone());
                 }
                 TableChangeEvents::RemovePrimaryKey(column_name) => {
-                    format!(
-                        "ALTER TABLE \"{}\" DROP CONSTRAINT IF EXISTS pk_{}_{}",
-                        current_table_name, current_table_name, column_name
-                    )
+                    if let Some(existing_index) = primary_key_columns
+                        .iter()
+                        .position(|existing_column_name| existing_column_name == column_name)
+                    {
+                        primary_key_columns.remove(existing_index);
+                    }
                 }
-            };
+            }
+        }
 
-            // Execute the query within the transaction
+        // Handle primary key changes separately
+        if *initial_primary_key_column_names != primary_key_columns {
+            if let Some(primary_key_constraint) =
+                self.get_primary_key_constraint(&table_name).await.unwrap()
+            {
+                let drop_query = format!(
+                    "ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\"",
+                    current_table_name, primary_key_constraint.conname
+                );
+                queries.push(drop_query);
+            }
+            let add_query = format!(
+                "ALTER TABLE \"{}\" ADD CONSTRAINT pk_{} PRIMARY KEY ({})",
+                current_table_name,
+                current_table_name,
+                primary_key_columns.join(", ")
+            );
+            queries.push(add_query);
+        }
+
+        // Execute each query in the transaction
+        for query in queries {
             println!("Executing query: {}", query);
             sqlx::query(&query).execute(&mut *transaction).await?;
         }
 
-        // Commit the transaction if all queries succeed
+        // Commit the transaction
         transaction.commit().await?;
 
         Ok(())

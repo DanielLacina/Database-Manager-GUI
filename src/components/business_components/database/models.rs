@@ -18,3 +18,8 @@ pub struct TableGeneralInfo {
     pub column_names: Vec<String>,
     pub data_types: Vec<String>,
 }
+
+#[derive(sqlx::FromRow, Debug, Clone, PartialEq)]
+pub struct PrimaryKeyConstraint {
+    pub conname: String,
+}

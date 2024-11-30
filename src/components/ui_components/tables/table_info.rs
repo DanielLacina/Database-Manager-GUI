@@ -13,6 +13,7 @@ use crate::components::ui_components::{
     tables::foreign_key_dropdown::{ForeignKeyDropDownUI, ForeignKeyDropdownEvents},
 };
 use iced::{
+    alignment::Vertical,
     border,
     border::Radius,
     font::Font,
@@ -341,17 +342,25 @@ impl TableInfoUI {
     fn scrollable_columns_info(&self) -> Element<'_, Message> {
         let columns_info_column = self.build_columns_info();
         scrollable(container(columns_info_column.spacing(10)).padding(10))
-            .height(Length::FillPortion(3))
+            .height(Length::Fill)
+            .direction(scrollable::Direction::Both {
+                vertical: scrollable::Scrollbar::new(),
+                horizontal: scrollable::Scrollbar::new(),
+            })
             .into()
     }
 
     fn build_columns_info(&self) -> Column<'_, Message> {
-        self.columns_display.iter().enumerate().fold(
-            Column::new().spacing(10),
-            |columns_info_column, (index, column_info)| {
-                columns_info_column.push(self.build_column_row(index, column_info))
-            },
-        )
+        self.columns_display
+            .iter()
+            .enumerate()
+            .fold(
+                Column::new().spacing(10),
+                |columns_info_column, (index, column_info)| {
+                    columns_info_column.push(self.build_column_row(index, column_info))
+                },
+            )
+            .into()
     }
 
     fn build_column_row<'a>(&'a self, index: usize, column_info: &'a BColumn) -> Row<'a, Message> {
@@ -362,13 +371,13 @@ impl TableInfoUI {
             .push(self.primary_key_checkbox(index, &column_info))
             .push(self.render_foreign_key_button(index, &column_info))
             .push(self.remove_column_button(index))
-            .width(Length::Fill)
+            .align_y(Vertical::Center)
     }
 
     fn column_name_input<'a>(&'a self, index: usize, name: &str) -> TextInput<'a, Message> {
         text_input("Column Name", name)
             .on_input(move |value| TableInfoMessage::UpdateColumnName(index, value).message())
-            .width(Length::FillPortion(2))
+            .width(200)
             .padding(5)
             .style(|_, _| text_input_style())
     }
@@ -381,7 +390,7 @@ impl TableInfoUI {
                 <TableInfoUI as UIComponent>::EventType::UpdateColumnType(index, value).message()
             },
         )
-        .width(Length::FillPortion(1))
+        .width(150)
         .padding(5)
         .into()
     }
