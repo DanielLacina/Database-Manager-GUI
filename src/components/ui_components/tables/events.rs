@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BDataType, BTable, BTableGeneralInfo, BTableIn, BTableInfo},
+    component::{BDataType, BTable, BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo},
     components::BusinessTables,
 };
 use crate::components::ui_components::{component::Event, events::Message};
@@ -64,6 +64,8 @@ pub enum TableInfoMessage {
     AddForeignKey(usize, String, String),
     RemoveForeignKey(usize),
     SetOrRemovePrimaryKey(usize),
+    AddTableChangeEvent(BTableChangeEvents),
+    TableChangeEventDone,
 }
 
 impl Event for TableInfoMessage {

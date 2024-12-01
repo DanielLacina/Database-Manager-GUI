@@ -64,21 +64,24 @@ impl UIComponent for TableInfoUI {
             Self::EventType::AddColumn => {
                 let new_column = BColumn::default();
                 self.columns_display.push(new_column.clone());
-                let mut locked_table_info = self.table_info.blocking_lock();
-                locked_table_info.add_table_change_event(BTableChangeEvents::AddColumn(
-                    new_column.name,
-                    new_column.datatype,
-                ));
-                Task::none()
+                Task::done(
+                    Self::EventType::AddTableChangeEvent(BTableChangeEvents::AddColumn(
+                        new_column.name,
+                        new_column.datatype,
+                    ))
+                    .message(),
+                )
             }
             Self::EventType::RemoveColumn(index) => {
                 if index < self.columns_display.len() {
+                    self.columns_display.remove(index);
                     if let Some(column) = self.columns_display.get_mut(index) {
-                        let mut locked_table_info = self.table_info.blocking_lock();
-                        locked_table_info.add_table_change_event(BTableChangeEvents::RemoveColumn(
-                            column.name.clone(),
-                        ));
-                        self.columns_display.remove(index);
+                        return Task::done(
+                            Self::EventType::AddTableChangeEvent(BTableChangeEvents::RemoveColumn(
+                                column.name.clone(),
+                            ))
+                            .message(),
+                        );
                     }
                 }
                 Task::none()
@@ -87,43 +90,52 @@ impl UIComponent for TableInfoUI {
                 if let Some(column) = self.columns_display.get_mut(index) {
                     let original_column_name = column.name.clone();
                     column.name = new_column_name.clone();
-                    let mut locked_table_info = self.table_info.blocking_lock();
-                    locked_table_info.add_table_change_event(BTableChangeEvents::ChangeColumnName(
-                        original_column_name,
-                        new_column_name,
-                    ));
+                    Task::done(
+                        Self::EventType::AddTableChangeEvent(BTableChangeEvents::ChangeColumnName(
+                            original_column_name,
+                            new_column_name,
+                        ))
+                        .message(),
+                    )
+                } else {
+                    Task::none()
                 }
-                Task::none()
             }
             Self::EventType::UpdateColumnType(index, new_datatype) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
                     column.datatype = new_datatype.clone();
-                    let mut locked_table_info = self.table_info.blocking_lock();
-                    locked_table_info.add_table_change_event(
-                        BTableChangeEvents::ChangeColumnDataType(column.name.clone(), new_datatype),
-                    );
+                    Task::done(
+                        Self::EventType::AddTableChangeEvent(
+                            BTableChangeEvents::ChangeColumnDataType(
+                                column.name.clone(),
+                                new_datatype,
+                            ),
+                        )
+                        .message(),
+                    )
+                } else {
+                    Task::none()
                 }
-                Task::none()
             }
             Self::EventType::UpdateTableName(new_table_name) => {
                 self.table_name_display = new_table_name.clone();
-                let mut locked_table_info = self.table_info.blocking_lock();
-
-                locked_table_info
-                    .add_table_change_event(BTableChangeEvents::ChangeTableName(new_table_name));
-                Task::none()
+                Task::done(
+                    Self::EventType::AddTableChangeEvent(BTableChangeEvents::ChangeTableName(
+                        new_table_name,
+                    ))
+                    .message(),
+                )
             }
             Self::EventType::SubmitUpdateTable => {
                 let table_info = self.table_info.clone();
                 Task::perform(
                     async move {
-                        let mut locked_table_info = table_info.blocking_lock();
+                        let mut locked_table_info = table_info.lock().await;
                         locked_table_info.alter_table().await;
                     },
                     |_| Self::EventType::UpdateTableInfo.message(),
                 )
             }
-
             Self::EventType::UpdateTableInfo => {
                 let locked_table_info = self.table_info.blocking_lock();
                 self.columns_display = locked_table_info.columns_info.clone();
@@ -142,31 +154,26 @@ impl UIComponent for TableInfoUI {
                             BConstraint::ForeignKey(existing_table_name, existing_column_name)
                         )
                     }) {
-                        // Remove the foreign key constraint if it exists
+                        // Replace the foreign key constraint if it exists
                         column.constraints.remove(existing_index);
-                        column.constraints.push(BConstraint::ForeignKey(
-                            referenced_table_name.clone(),
-                            referenced_column_name.clone(),
-                        ));
-                    } else {
-                        // Add the foreign key constraint if it does not exist
-                        column.constraints.push(BConstraint::ForeignKey(
-                            referenced_table_name.clone(),
-                            referenced_column_name.clone(),
-                        ));
                     }
-                    let mut locked_table_info = self.table_info.blocking_lock();
-                    locked_table_info.add_table_change_event(BTableChangeEvents::AddForeignKey(
-                        BColumnForeignKey {
-                            column_name: column.name.clone(),
-                            referenced_table: referenced_table_name,
-                            referenced_column: referenced_column_name,
-                        },
+                    column.constraints.push(BConstraint::ForeignKey(
+                        referenced_table_name.clone(),
+                        referenced_column_name.clone(),
                     ));
+                    Task::done(
+                        Self::EventType::AddTableChangeEvent(BTableChangeEvents::AddForeignKey(
+                            BColumnForeignKey {
+                                column_name: column.name.clone(),
+                                referenced_table: referenced_table_name,
+                                referenced_column: referenced_column_name,
+                            },
+                        ))
+                        .message(),
+                    )
+                } else {
+                    Task::none()
                 }
-
-                self.active_foreign_key_dropdown = None;
-                Task::none()
             }
             Self::EventType::RemoveForeignKey(index) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
@@ -178,37 +185,53 @@ impl UIComponent for TableInfoUI {
                     }) {
                         column.constraints.remove(existing_index);
                     }
-                    let mut locked_table_info = self.table_info.blocking_lock();
-                    locked_table_info.add_table_change_event(BTableChangeEvents::RemoveForeignKey(
-                        column.name.clone(),
-                    ));
+                    Task::done(
+                        Self::EventType::AddTableChangeEvent(BTableChangeEvents::RemoveForeignKey(
+                            column.name.clone(),
+                        ))
+                        .message(),
+                    )
+                } else {
+                    Task::none()
                 }
-                self.active_foreign_key_dropdown = None;
-
-                Task::none()
             }
             Self::EventType::SetOrRemovePrimaryKey(index) => {
                 if let Some(column) = self.columns_display.get_mut(index) {
-                    let mut locked_table_info = self.table_info.blocking_lock();
                     if let Some(existing_index) = column
                         .constraints
                         .iter()
                         .position(|constraint| matches!(constraint, BConstraint::PrimaryKey))
                     {
                         column.constraints.remove(existing_index);
-                        locked_table_info.add_table_change_event(
-                            BTableChangeEvents::RemovePrimaryKey(column.name.clone()),
-                        );
+                        Task::done(
+                            Self::EventType::AddTableChangeEvent(
+                                BTableChangeEvents::RemovePrimaryKey(column.name.clone()),
+                            )
+                            .message(),
+                        )
                     } else {
                         column.constraints.push(BConstraint::PrimaryKey);
-                        locked_table_info.add_table_change_event(
-                            BTableChangeEvents::AddPrimaryKey(column.name.clone()),
-                        );
+                        Task::done(
+                            Self::EventType::AddTableChangeEvent(
+                                BTableChangeEvents::AddPrimaryKey(column.name.clone()),
+                            )
+                            .message(),
+                        )
                     }
+                } else {
+                    Task::none()
                 }
-                Task::none()
             }
-
+            Self::EventType::AddTableChangeEvent(table_change_event) => {
+                let table_info = self.table_info.clone();
+                Task::perform(
+                    async move {
+                        let mut locked_table_info = table_info.lock().await;
+                        locked_table_info.add_table_change_event(table_change_event);
+                    },
+                    |_| Self::EventType::TableChangeEventDone.message(),
+                )
+            }
             Self::EventType::ToggleForeignKeyDropdown(index) => {
                 if let Some(column) = self.columns_display.get(index) {
                     let locked_table_info = self.table_info.blocking_lock();
@@ -243,6 +266,7 @@ impl UIComponent for TableInfoUI {
                 }
                 Task::none()
             }
+            Self::EventType::TableChangeEventDone => Task::none(),
         }
     }
 }
