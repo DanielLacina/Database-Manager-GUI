@@ -303,16 +303,16 @@ impl TablesUI {
     }
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
         let locked_tables = self.tables.blocking_lock();
-        if let Some(tables) = locked_tables.tables_general_info {
+        if let Some(tables) = locked_tables.tables_general_info.clone() {
             let tables = tables.lock().unwrap().clone();
             let mut tables_column = Column::new().spacing(10).padding(10);
             let table_filter_pattern = self.get_table_filter_regex();
 
             for table in tables
-                .iter()
+                .into_iter()
                 .filter(|t| table_filter_pattern.is_match(&t.table_name))
             {
-                let view_button = button(text(&table.table_name)).on_press(
+                let view_button = button(text(table.table_name.clone())).on_press(
                     <TablesUI as UIComponent>::EventType::message(
                         <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
                             table.table_name.clone(),
