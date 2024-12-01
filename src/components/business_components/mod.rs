@@ -1,5 +1,6 @@
 pub mod component;
 pub mod components;
+mod console;
 mod database;
-pub mod home;
-pub mod tables;
+mod home;
+mod tables;

@@ -26,13 +26,15 @@ use iced::{
 };
 use regex::Regex;
 use std::iter::zip;
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct TablesUI {
     pub table_filter: String,
     pub show_create_table_form: bool,
     pub create_table_form: CreateTableFormUI,
-    pub tables: BusinessTables,
+    pub tables: Arc<AsyncMutex<BusinessTables>>,
     pub single_table_info: Option<TableInfoUI>,
     pub table_to_delete: Option<String>,
 }
@@ -56,27 +58,26 @@ impl UIComponent for TablesUI {
                     CreateTableFormMessage::SubmitCreateTable(create_table_input) => {
                         let create_table_input = create_table_input.clone();
                         let task_result = self.create_table_form.update(create_table_form_message);
-                        let mut tables = self.tables.clone();
+                        let tables = self.tables.clone();
                         task_result.chain(Task::perform(
                             async move {
                                 let table_name = create_table_input.table_name.clone();
-                                tables.add_table(create_table_input).await;
-                                (tables, table_name)
+                                let mut locked_tables = tables.lock().await;
+                                locked_tables.add_table(create_table_input).await;
+                                table_name
                             },
-                            |table_tuple| {
-                                let (tables, table_name) = table_tuple;
+                            |table_name| {
                                 Self::EventType::message(Self::EventType::CreateTableForm(
-                                    CreateTableFormMessage::TableCreated(tables, table_name),
+                                    CreateTableFormMessage::TableCreated(table_name),
                                 ))
                             },
                         ))
                     }
-                    CreateTableFormMessage::TableCreated(tables, table_name) => {
+                    CreateTableFormMessage::TableCreated(table_name) => {
                         let task_result = self
                             .create_table_form
                             .update(create_table_form_message.clone());
                         self.show_create_table_form = false;
-                        self.tables = tables.clone();
                         task_result.chain(Task::done(Self::EventType::message(
                             Self::EventType::GetSingleTableInfo(table_name.clone()),
                         )))
@@ -85,23 +86,21 @@ impl UIComponent for TablesUI {
                 }
             }
             Self::EventType::GetSingleTableInfo(table_name) => {
-                let mut tables = self.tables.clone();
+                let tables = self.tables.clone();
 
                 Task::perform(
                     async move {
-                        tables.set_table_info(table_name).await;
-                        tables.table_info.unwrap()
+                        let mut locked_tables = tables.lock().await;
+                        locked_tables.set_table_info(table_name).await;
                     },
-                    |table_info| Self::EventType::SetSingleTableInfo(table_info).message(),
+                    |_| Self::EventType::SetSingleTableInfo.message(),
                 )
             }
-            Self::EventType::SetSingleTableInfo(table_info) => {
-                self.tables.table_info = None; // object is no longer needed becasue logic is in
-                                               // the table info ui component
-                self.single_table_info = Some(TableInfoUI::new(
-                    table_info,
-                    self.tables.tables_general_info.clone(),
-                ));
+            Self::EventType::SetSingleTableInfo => {
+                let locked_tables = self.tables.blocking_lock();
+                if let Some(table_info) = &locked_tables.table_info {
+                    self.single_table_info = Some(TableInfoUI::new(table_info.clone()));
+                }
                 Task::none()
             }
             Self::EventType::UndisplayTableInfo => {
@@ -110,15 +109,7 @@ impl UIComponent for TablesUI {
             }
             Self::EventType::SingleTableInfo(table_info_message) => {
                 if let Some(table_info) = &mut self.single_table_info {
-                    match table_info_message {
-                        TableInfoMessage::SubmitUpdateTable => {
-                            let result_message = table_info.update(table_info_message);
-                            result_message.chain(Task::done(Self::EventType::message(
-                                Self::EventType::UpdateTables,
-                            )))
-                        }
-                        _ => table_info.update(table_info_message),
-                    }
+                    table_info.update(table_info_message)
                 } else {
                     Task::none()
                 }
@@ -129,21 +120,17 @@ impl UIComponent for TablesUI {
                 Task::none()
             }
             Self::EventType::InitializeComponent => {
-                let mut tables = self.tables.clone();
+                let tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        tables.update_tables().await;
-                        tables.set_general_tables_info().await;
-                        tables
+                        let mut locked_tables = tables.lock().await;
+                        locked_tables.set_general_tables_info().await;
                     },
-                    |tables| Self::EventType::ComponentInitialized(tables).message(),
+                    |_| Self::EventType::ComponentInitialized.message(),
                 )
             }
-            Self::EventType::ComponentInitialized(tables) => {
-                self.tables = tables;
-                self.create_table_form.tables_general_info =
-                    self.tables.tables_general_info.clone();
-                Task::none()
+            Self::EventType::ComponentInitialized => {
+                Task::done(Self::EventType::SetTables.message())
             }
             Self::EventType::ConfirmDeleteTable => {
                 if let Some(table_to_delete) = self.table_to_delete.clone() {
@@ -153,16 +140,14 @@ impl UIComponent for TablesUI {
                         }
                     }
                     self.table_to_delete = None;
-                    let mut tables = self.tables.clone();
+                    let tables = self.tables.clone();
 
                     Task::perform(
                         async move {
-                            tables.delete_table(table_to_delete).await;
-                            tables.set_general_tables_info().await;
-
-                            tables
+                            let mut locked_tables = tables.lock().await;
+                            locked_tables.delete_table(table_to_delete).await;
                         },
-                        |tables| Self::EventType::SetTables(tables).message(),
+                        |_| Self::EventType::SetTables.message(),
                     )
                 } else {
                     Task::none()
@@ -172,37 +157,17 @@ impl UIComponent for TablesUI {
                 self.table_to_delete = None;
                 Task::none()
             }
-            Self::EventType::UpdateTables => {
-                let mut tables = self.tables.clone();
-                Task::perform(
-                    async move {
-                        tables.update_tables().await;
-                        tables.set_general_tables_info().await;
-
-                        tables
-                    },
-                    |tables| Self::EventType::SetTables(tables).message(),
-                )
-            }
-            Self::EventType::SetTables(tables) => {
-                self.tables = tables;
-                self.create_table_form.tables_general_info =
-                    self.tables.tables_general_info.clone();
-                if let Some(single_table_info) = &mut self.single_table_info {
-                    single_table_info.tables_general_info = self.tables.tables_general_info.clone();
-                }
-                Task::none()
-            }
+            Self::EventType::SetTables => Task::none(),
         }
     }
 }
 
 impl TablesUI {
-    pub fn new(tables: BusinessTables) -> Self {
+    pub fn new(tables: Arc<AsyncMutex<BusinessTables>>) -> Self {
         Self {
             table_filter: String::default(),
             show_create_table_form: false,
-            create_table_form: CreateTableFormUI::new(None),
+            create_table_form: CreateTableFormUI::new(None, tables.clone()),
             tables,
             single_table_info: None,
             table_to_delete: None,
@@ -337,7 +302,9 @@ impl TablesUI {
         container(modal_content).padding(20).into()
     }
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
-        if let Some(tables) = &self.tables.tables {
+        let locked_tables = self.tables.blocking_lock();
+        if let Some(tables) = locked_tables.tables_general_info {
+            let tables = tables.lock().unwrap().clone();
             let mut tables_column = Column::new().spacing(10).padding(10);
             let table_filter_pattern = self.get_table_filter_regex();
 

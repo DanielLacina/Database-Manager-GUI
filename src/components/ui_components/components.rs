@@ -6,7 +6,7 @@ use crate::components::ui_components::{
     events::Message,
 };
 use crate::components::ui_components::{
-    console::console::Console,
+    console::console::ConsoleUI,
     home::{events::HomeMessage, home::HomeUI},
     tables::{events::TablesMessage, tables::TablesUI},
 };
@@ -33,7 +33,7 @@ pub enum CurrentComponent {
 pub struct UIComponents {
     pub home_ui: HomeUI,
     pub tables_ui: TablesUI,
-    pub console: Console,
+    pub console_ui: ConsoleUI,
     pub current_component: CurrentComponent,
     pub show_console: bool,
 }
@@ -59,7 +59,7 @@ impl UIComponents {
         Self {
             home_ui: HomeUI::new(business_components.home),
             tables_ui: TablesUI::new(business_components.tables),
-            console: Console::new(),
+            console_ui: ConsoleUI::new(business_components.console.clone()),
             current_component: CurrentComponent::Home,
             show_console: false,
         }

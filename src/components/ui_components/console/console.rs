@@ -1,3 +1,4 @@
+use crate::components::business_components::components::BusinessConsole;
 use crate::components::ui_components::component::{Event, UIComponent};
 use crate::components::ui_components::console::events::ConsoleMessage;
 use crate::components::ui_components::events::Message;
@@ -11,13 +12,15 @@ use iced::{
     },
     Alignment, Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
-pub struct Console {
+pub struct ConsoleUI {
+    console: Arc<Mutex<BusinessConsole>>,
     messages: Vec<String>,
 }
 
-impl UIComponent for Console {
+impl UIComponent for ConsoleUI {
     type EventType = ConsoleMessage;
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
@@ -34,16 +37,19 @@ impl UIComponent for Console {
     }
 }
 
-impl Console {
-    pub fn new() -> Self {
-        Self { messages: vec![] }
+impl ConsoleUI {
+    pub fn new(console: Arc<Mutex<BusinessConsole>>) -> Self {
+        Self {
+            messages: vec![],
+            console,
+        }
     }
 
     pub fn content(&self) -> Column<'_, Message> {
         let mut console_display = Column::new().spacing(10).padding(10);
 
         // Add each message to the console display
-        for message in &self.messages {
+        for message in self.console.lock().unwrap().messages.clone() {
             let text_widget = Text::new(message)
                 .size(16)
                 .width(Length::Fill)

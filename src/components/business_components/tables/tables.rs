@@ -2,15 +2,17 @@ use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
     BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
 };
+use crate::components::business_components::components::BusinessConsole;
 use crate::components::business_components::tables::table_info::TableInfo;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct Tables {
     repository: Arc<BRepository>,
-    pub tables: Option<Vec<BTable>>,
-    pub table_info: Option<TableInfo>,
-    pub tables_general_info: Option<Vec<BTableGeneralInfo>>,
+    pub table_info: Option<Arc<AsyncMutex<TableInfo>>>,
+    pub tables_general_info: Option<Arc<Mutex<Vec<BTableGeneralInfo>>>>,
+    pub console: Arc<Mutex<BusinessConsole>>,
 }
 
 impl BusinessComponent for Tables {
@@ -20,37 +22,44 @@ impl BusinessComponent for Tables {
 }
 
 impl Tables {
-    pub fn new(repository: Arc<BRepository>) -> Self {
+    pub fn new(repository: Arc<BRepository>, console: Arc<Mutex<BusinessConsole>>) -> Self {
         Self {
             repository,
-            tables: None,
             table_info: None,
             tables_general_info: None,
+            console,
         }
     }
 
     pub async fn set_general_tables_info(&mut self) {
-        self.tables_general_info = Some(self.repository.get_general_tables_info().await.unwrap());
+        self.tables_general_info = Some(Arc::new(Mutex::new(
+            self.repository.get_general_tables_info().await.unwrap(),
+        )));
     }
 
     pub async fn set_table_info(&mut self, table_name: String) {
-        let mut table_info = TableInfo::new(self.repository.clone(), table_name);
+        let mut table_info = TableInfo::new(
+            self.repository.clone(),
+            self.console.clone(),
+            self.tables_general_info.clone(),
+            table_name,
+        );
         table_info.initialize_component().await;
-        self.table_info = Some(table_info);
+        self.table_info = Some(Arc::new(AsyncMutex::new(table_info)));
     }
 
     pub async fn add_table(&mut self, table_in: BTableIn) {
         self.repository.create_table(&table_in).await;
-        self.tables = Some(self.repository.get_tables().await.unwrap());
+        self.set_general_tables_info().await;
     }
 
     pub async fn update_tables(&mut self) {
-        self.tables = Some(self.repository.get_tables().await.unwrap());
+        self.set_general_tables_info().await;
     }
 
     pub async fn delete_table(&mut self, table_name: String) {
         self.repository.delete_table(&table_name).await;
-        self.tables = Some(self.repository.get_tables().await.unwrap());
+        self.set_general_tables_info().await;
     }
 }
 
@@ -61,8 +70,9 @@ mod tests {
 
     async fn tables_component(pool: PgPool, table_in: &BTableIn) -> Tables {
         let repository = BRepository::new(Some(pool)).await;
+        let console = BusinessConsole::new();
         repository.create_table(table_in).await;
-        Tables::new(repository.into())
+        Tables::new(repository.into(), Arc::new(Mutex::new(console)))
     }
 
     /// Helper function to initialize the `Tables` component.

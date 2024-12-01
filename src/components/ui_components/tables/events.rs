@@ -7,16 +7,15 @@ use crate::components::ui_components::{component::Event, events::Message};
 #[derive(Debug, Clone)]
 pub enum TablesMessage {
     UpdateTableFilter(String),
-    UpdateTables,
-    SetTables(BusinessTables),
     ShowOrRemoveCreateTableForm,
     GetSingleTableInfo(String),
-    SetSingleTableInfo(BTableInfo),
+    SetSingleTableInfo,
     UndisplayTableInfo,
     SingleTableInfo(TableInfoMessage),
     CreateTableForm(CreateTableFormMessage),
     InitializeComponent,
-    ComponentInitialized(BusinessTables),
+    SetTables,
+    ComponentInitialized,
     RequestDeleteTable(String),
     ConfirmDeleteTable,
     CancelDeleteTable,
@@ -36,7 +35,7 @@ pub enum CreateTableFormMessage {
     UpdateColumnName(usize, String),    // Event to update the name of a specific column
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
-    TableCreated(BusinessTables, String),
+    TableCreated(String),
     SetOrRemovePrimaryKey(usize),
     AddForeignKey(usize, String, String),
     RemoveForeignKey(usize),
@@ -59,7 +58,7 @@ pub enum TableInfoMessage {
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
     SubmitUpdateTable,
-    UpdateTableInfo(BTableInfo),
+    UpdateTableInfo,
     ToggleForeignKeyDropdown(usize),
     ToggleForeignKeyTable(usize, String),
     AddForeignKey(usize, String, String),

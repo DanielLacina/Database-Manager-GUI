@@ -1,10 +1,9 @@
-use crate::components::business_components::components::BusinessHome;
 use crate::components::ui_components::{component::Event, events::Message};
 
 #[derive(Debug, Clone)]
 pub enum HomeMessage {
     InitializeComponent,
-    ComponentInitialized(BusinessHome),
+    ComponentInitialized,
 }
 
 impl Event for HomeMessage {
