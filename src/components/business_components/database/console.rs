@@ -13,4 +13,8 @@ impl RepositoryConsole {
     pub fn write(&mut self, message: String) {
         self.messages.push(message);
     }
+
+    pub fn clear_messages(&mut self) {
+        self.messages = vec![];
+    }
 }
