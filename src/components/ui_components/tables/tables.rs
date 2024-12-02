@@ -304,7 +304,7 @@ impl TablesUI {
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
         let locked_tables = self.tables.blocking_lock();
         if let Some(tables) = locked_tables.tables_general_info.clone() {
-            let tables = tables.lock().unwrap().clone();
+            let tables = tables.blocking_lock().clone();
             let mut tables_column = Column::new().spacing(10).padding(10);
             let table_filter_pattern = self.get_table_filter_regex();
 

@@ -11,7 +11,7 @@ use tokio::sync::Mutex as AsyncMutex;
 pub struct Tables {
     repository: Arc<BRepository>,
     pub table_info: Option<Arc<AsyncMutex<TableInfo>>>,
-    pub tables_general_info: Option<Arc<Mutex<Vec<BTableGeneralInfo>>>>,
+    pub tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
     pub console: Arc<Mutex<BusinessConsole>>,
 }
 
@@ -32,9 +32,14 @@ impl Tables {
     }
 
     pub async fn set_general_tables_info(&mut self) {
-        self.tables_general_info = Some(Arc::new(Mutex::new(
-            self.repository.get_general_tables_info().await.unwrap(),
-        )));
+        if let Some(ref tables) = self.tables_general_info {
+            let mut locked_tables = tables.lock().await;
+            *locked_tables = self.repository.get_general_tables_info().await.unwrap();
+        } else {
+            self.tables_general_info = Some(Arc::new(AsyncMutex::new(
+                self.repository.get_general_tables_info().await.unwrap(),
+            )));
+        }
     }
 
     pub async fn set_table_info(&mut self, table_name: String) {

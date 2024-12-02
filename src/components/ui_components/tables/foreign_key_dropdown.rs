@@ -18,6 +18,7 @@ use iced::{
 };
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 pub trait ForeignKeyDropdownEvents {
     fn add_foreign_key(
@@ -32,7 +33,7 @@ pub trait ForeignKeyDropdownEvents {
 
 #[derive(Debug, Clone)]
 pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
-    pub tables_general_info: Option<Arc<Mutex<Vec<BTableGeneralInfo>>>>,
+    pub tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
     pub active_foreign_key_table_within_dropdown: Option<String>,
     pub column: BColumn,
     pub events: T,
@@ -42,7 +43,7 @@ pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
 impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
     pub fn new(
         column: BColumn,
-        tables_general_info: Option<Arc<Mutex<Vec<BTableGeneralInfo>>>>,
+        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
         events: T,
         active_foreign_key_table_within_dropdown: Option<String>,
         index: usize,
@@ -58,7 +59,7 @@ impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
 
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
         if let Some(tables_general_info) = &self.tables_general_info {
-            let locked_tables_general_info = tables_general_info.lock().unwrap().clone();
+            let locked_tables_general_info = tables_general_info.blocking_lock().clone();
             let dropdown = locked_tables_general_info.into_iter().fold(
                 Column::new()
                     .spacing(10)

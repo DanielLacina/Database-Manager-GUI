@@ -4,13 +4,14 @@ use crate::components::business_components::component::{
 };
 use crate::components::business_components::components::BusinessConsole;
 use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct TableInfo {
     repository: Arc<BRepository>,
     pub table_name: String,
     pub columns_info: Vec<BColumn>,
-    pub tables_general_info: Option<Arc<Mutex<Vec<BTableGeneralInfo>>>>,
+    pub tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
     table_change_events: Vec<BTableChangeEvents>,
     console: Arc<Mutex<BusinessConsole>>,
 }
@@ -25,7 +26,7 @@ impl TableInfo {
     pub fn new(
         repository: Arc<BRepository>,
         console: Arc<Mutex<BusinessConsole>>,
-        tables_general_info: Option<Arc<Mutex<Vec<BTableGeneralInfo>>>>,
+        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
         table_name: String,
     ) -> Self {
         Self {
@@ -396,10 +397,16 @@ impl TableInfo {
             .iter()
             .position(|event| matches!(event, BTableChangeEvents::ChangeTableName(_)))
     }
+
     pub async fn set_general_tables_info(&mut self) {
-        self.tables_general_info = Some(Arc::new(Mutex::new(
-            self.repository.get_general_tables_info().await.unwrap(),
-        )));
+        if let Some(ref tables) = self.tables_general_info {
+            let mut locked_tables = tables.lock().await;
+            *locked_tables = self.repository.get_general_tables_info().await.unwrap();
+        } else {
+            self.tables_general_info = Some(Arc::new(AsyncMutex::new(
+                self.repository.get_general_tables_info().await.unwrap(),
+            )));
+        }
     }
     pub async fn alter_table(&mut self) {
         if !self.table_change_events.is_empty() {

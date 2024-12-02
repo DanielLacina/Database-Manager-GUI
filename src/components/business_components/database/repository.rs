@@ -163,7 +163,7 @@ impl Repository {
     }
 
     pub async fn delete_table(&self, table_name: &str) {
-        sqlx::query(&format!("DROP TABLE {}", &table_name))
+        sqlx::query(&format!("DROP TABLE \"{}\"", &table_name))
             .execute(&self.pool)
             .await
             .unwrap();
