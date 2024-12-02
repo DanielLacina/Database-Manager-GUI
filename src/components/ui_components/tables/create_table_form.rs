@@ -146,7 +146,18 @@ impl UIComponent for CreateTableFormUI {
                 self.create_table_input = BTableIn::default();
                 Task::none()
             }
-            Self::EventType::SubmitCreateTable(create_table_input) => Task::none(),
+            Self::EventType::SubmitCreateTable(create_table_input) => {
+                let tables = self.tables.clone();
+                Task::perform(
+                    async move {
+                        let table_name = create_table_input.table_name.clone();
+                        let mut locked_tables = tables.lock().await;
+                        locked_tables.add_table(create_table_input).await;
+                        table_name
+                    },
+                    |table_name| Self::EventType::TableCreated(table_name).message(),
+                )
+            }
             Self::EventType::ShowOrRemoveCreateTableForm => {
                 if self.create_table_input.columns.len() == 0 {
                     for _ in 0..1 {
