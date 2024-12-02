@@ -1,15 +1,19 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BColumnsInfo, BConstraint,
-    BDataType, BTable, BTableChangeEvents, BTableIn, BusinessComponent,
+    BDataType, BTable, BTableChangeEvents, BTableGeneralInfo, BTableIn, BusinessComponent,
 };
-use std::sync::Arc;
+use crate::components::business_components::components::BusinessConsole;
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct TableInfo {
     repository: Arc<BRepository>,
     pub table_name: String,
     pub columns_info: Vec<BColumn>,
+    pub tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
     table_change_events: Vec<BTableChangeEvents>,
+    console: Arc<Mutex<BusinessConsole>>,
 }
 
 impl BusinessComponent for TableInfo {
@@ -19,12 +23,19 @@ impl BusinessComponent for TableInfo {
 }
 
 impl TableInfo {
-    pub fn new(repository: Arc<BRepository>, table_name: String) -> Self {
+    pub fn new(
+        repository: Arc<BRepository>,
+        console: Arc<Mutex<BusinessConsole>>,
+        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
+        table_name: String,
+    ) -> Self {
         Self {
             repository,
             table_name,
             columns_info: vec![],
             table_change_events: vec![],
+            console,
+            tables_general_info,
         }
     }
 
@@ -75,7 +86,8 @@ impl TableInfo {
                 self.handle_remove_primary_key(column_name);
             }
         }
-        println!("{:?}", self.table_change_events);
+        let mut locked_console = self.console.lock().unwrap();
+        locked_console.write(format!("{:?}", self.table_change_events));
     }
 
     fn handle_add_column(&mut self, column_name: String, data_type: BDataType) {
@@ -386,6 +398,16 @@ impl TableInfo {
             .position(|event| matches!(event, BTableChangeEvents::ChangeTableName(_)))
     }
 
+    pub async fn set_general_tables_info(&mut self) {
+        if let Some(ref tables) = self.tables_general_info {
+            let mut locked_tables = tables.lock().await;
+            *locked_tables = self.repository.get_general_tables_info().await.unwrap();
+        } else {
+            self.tables_general_info = Some(Arc::new(AsyncMutex::new(
+                self.repository.get_general_tables_info().await.unwrap(),
+            )));
+        }
+    }
     pub async fn alter_table(&mut self) {
         if !self.table_change_events.is_empty() {
             let primary_key_column_names: Vec<String> = self
@@ -418,6 +440,7 @@ impl TableInfo {
 
         self.table_change_events.clear();
         self.set_table_info().await;
+        self.set_general_tables_info().await;
     }
 }
 
@@ -429,8 +452,13 @@ mod tests {
     /// Helper function to create a `TableInfo` instance.
     async fn create_table_info(pool: PgPool, table_in: &BTableIn) -> TableInfo {
         let repository = BRepository::new(Some(pool)).await;
+        let console = BusinessConsole::new();
         repository.create_table(table_in).await;
-        let mut table_info = TableInfo::new(repository.into(), table_in.table_name.clone());
+        let mut table_info = TableInfo::new(
+            repository.into(),
+            console.into(),
+            table_in.table_name.clone(),
+        );
         table_info.set_table_info().await;
         table_info
     }

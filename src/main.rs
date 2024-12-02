@@ -51,7 +51,7 @@ impl Crm {
 
                     // Conditionally add the console content
                     if components.show_console {
-                        display = display.push(components.console.content());
+                        display = display.push(components.console_ui.content());
                     }
 
                     display.into()
@@ -92,7 +92,7 @@ impl Crm {
             }
             Message::Console(console_message) => {
                 if let Some(components) = &mut self.components {
-                    components.console.update(console_message)
+                    components.console_ui.update(console_message)
                 } else {
                     Task::none()
                 }

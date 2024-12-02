@@ -12,10 +12,12 @@ use iced::{
     },
     Alignment, Background, Border, Color, Element, Length, Task, Theme,
 };
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct HomeUI {
-    pub home: BusinessHome,
+    pub home: Arc<AsyncMutex<BusinessHome>>,
 }
 
 impl UIComponent for HomeUI {
@@ -24,25 +26,22 @@ impl UIComponent for HomeUI {
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
             Self::EventType::InitializeComponent => {
-                let mut home = self.home.clone();
+                let home = self.home.clone();
                 Task::perform(
                     async move {
-                        home.initialize_component().await;
-                        home
+                        let mut locked_home = home.lock().await;
+                        locked_home.initialize_component().await;
                     },
-                    |home| Self::EventType::message(Self::EventType::ComponentInitialized(home)),
+                    |_| Self::EventType::ComponentInitialized.message(),
                 )
             }
-            Self::EventType::ComponentInitialized(home) => {
-                self.home = home;
-                Task::none()
-            }
+            Self::EventType::ComponentInitialized => Task::none(),
         }
     }
 }
 
 impl HomeUI {
-    pub fn new(home: BusinessHome) -> Self {
+    pub fn new(home: Arc<AsyncMutex<BusinessHome>>) -> Self {
         Self { home }
     }
 
@@ -53,10 +52,14 @@ impl HomeUI {
 
     /// Renders the title section
     fn title<'a>(&'a self) -> Element<'a, Message> {
-        let title_text = if let Some(title) = &self.home.title {
-            title
+        let title_text = if let Ok(home) = self.home.try_lock() {
+            if let Some(ref title) = home.title {
+                title.clone()
+            } else {
+                "Loading".to_string()
+            }
         } else {
-            "Loading"
+            "Loading".to_string()
         };
         container(text(title_text))
             .width(300)
