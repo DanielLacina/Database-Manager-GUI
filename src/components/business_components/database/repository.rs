@@ -1,22 +1,29 @@
 use crate::components::business_components::database::{
+    console::RepositoryConsole,
     database::create_database_pool,
     models::{ColumnsInfo, PrimaryKeyConstraint, TableGeneralInfo},
     schemas::{ColumnForeignKey, Constraint, TableChangeEvents, TableIn},
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct Repository {
     pool: PgPool,
+    console: Arc<AsyncMutex<RepositoryConsole>>,
 }
 
 impl Repository {
-    pub async fn new(existing_pool: Option<PgPool>) -> Self {
+    pub async fn new(
+        existing_pool: Option<PgPool>,
+        console: Arc<AsyncMutex<RepositoryConsole>>,
+    ) -> Self {
         if let Some(pool) = existing_pool {
-            Self { pool }
+            Self { pool, console }
         } else {
             let pool = create_database_pool().await;
-            Self { pool }
+            Self { pool, console }
         }
     }
 
@@ -253,7 +260,10 @@ impl Repository {
 
         // Execute each query in the transaction
         for query in queries {
-            println!("Executing query: {}", query);
+            let query_log = format!("Executing query: {}", query);
+            println!("{}", query_log);
+            let mut locked_console = self.console.lock().await;
+            locked_console.write(query_log);
             sqlx::query(&query).execute(&mut *transaction).await?;
         }
 

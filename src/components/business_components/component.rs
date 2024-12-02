@@ -19,7 +19,9 @@ pub trait BusinessComponent {
 }
 
 pub(super) mod repository_module {
+    use crate::components::business_components::database::console::RepositoryConsole;
     use crate::components::business_components::database::repository::Repository;
 
     pub type BRepository = Repository;
+    pub type BRepositoryConsole = RepositoryConsole;
 }
