@@ -53,24 +53,6 @@ impl UIComponent for TablesUI {
             }
             Self::EventType::CreateTableForm(create_table_form_message) => {
                 match &create_table_form_message {
-                    CreateTableFormMessage::SubmitCreateTable(create_table_input) => {
-                        let create_table_input = create_table_input.clone();
-                        let task_result = self.create_table_form.update(create_table_form_message);
-                        let tables = self.tables.clone();
-                        task_result.chain(Task::perform(
-                            async move {
-                                let table_name = create_table_input.table_name.clone();
-                                let mut locked_tables = tables.lock().await;
-                                locked_tables.add_table(create_table_input).await;
-                                table_name
-                            },
-                            |table_name| {
-                                Self::EventType::message(Self::EventType::CreateTableForm(
-                                    CreateTableFormMessage::TableCreated(table_name),
-                                ))
-                            },
-                        ))
-                    }
                     CreateTableFormMessage::TableCreated(table_name) => {
                         let task_result = self
                             .create_table_form

@@ -50,7 +50,7 @@ impl ConsoleUI {
         let mut console_display = Column::new().spacing(10).padding(10);
 
         // Add each message to the console display
-        for message in self.console.lock().unwrap().messages.clone() {
+        for message in self.console.lock().unwrap().database_messages() {
             let text_widget = Text::new(message)
                 .size(16)
                 .width(Length::Fill)

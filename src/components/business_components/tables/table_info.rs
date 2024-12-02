@@ -181,16 +181,13 @@ impl TableInfo {
     }
 
     fn handle_change_column_name(&mut self, column_name: String, new_column_name: String) {
-        if column_name.clone() == new_column_name {
+        if column_name == new_column_name {
             return;
         }
-        self.rename_existing_datatype_change_event(&column_name.clone(), &new_column_name);
-        if let Some(existing_event_index) =
-            self.find_existing_rename_column_event(&column_name.clone())
-        {
+        self.rename_existing_datatype_change_event(&column_name, &new_column_name);
+        if let Some(existing_event_index) = self.find_existing_rename_column_event(&column_name) {
             self.update_existing_rename_event(existing_event_index, new_column_name.clone());
-        } else if let Some(existing_event_index) =
-            self.find_existing_add_column_event(&column_name.clone())
+        } else if let Some(existing_event_index) = self.find_existing_add_column_event(&column_name)
         {
             self.update_existing_add_column_event(
                 existing_event_index,
