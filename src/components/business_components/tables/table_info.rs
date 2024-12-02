@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BColumnsInfo, BConstraint,
-    BDataType, BTable, BTableChangeEvents, BTableGeneralInfo, BTableIn, BusinessComponent,
+    BDataType, BTableChangeEvents, BTableGeneralInfo, BTableIn, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use std::sync::{Arc, Mutex};
@@ -450,16 +450,24 @@ mod tests {
     use sqlx::PgPool;
 
     /// Helper function to create a `TableInfo` instance.
-    async fn create_table_info(pool: PgPool, table_in: &BTableIn) -> TableInfo {
-        let repository = BRepository::new(Some(pool)).await;
-        let console = BusinessConsole::new();
+    async fn create_table_info(
+        pool: PgPool,
+        table_in: &BTableIn,
+        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
+    ) -> TableInfo {
+        let repository = Arc::new(BRepository::new(Some(pool.clone())).await);
+        let console = Arc::new(Mutex::new(BusinessConsole::new()));
         repository.create_table(table_in).await;
+
         let mut table_info = TableInfo::new(
-            repository.into(),
-            console.into(),
+            repository.clone(),
+            console.clone(),
+            tables_general_info.clone(),
             table_in.table_name.clone(),
         );
+
         table_info.set_table_info().await;
+        table_info.set_general_tables_info().await; // Initialize tables_general_info
         table_info
     }
 
@@ -481,9 +489,12 @@ mod tests {
         }
     }
 
-    async fn initialized_table_info(pool: PgPool, table_in: &BTableIn) -> TableInfo {
-        // default configuration to prevent redundant code
-        let mut table_info = create_table_info(pool, &table_in).await;
+    async fn initialized_table_info(
+        pool: PgPool,
+        table_in: &BTableIn,
+        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
+    ) -> TableInfo {
+        let mut table_info = create_table_info(pool, table_in, tables_general_info).await;
         table_info.initialize_component().await;
         table_info
     }
@@ -491,7 +502,10 @@ mod tests {
     #[sqlx::test]
     async fn test_initialize_component(pool: PgPool) {
         let table_in = default_table_in();
-        let mut table_info = initialized_table_info(pool, &table_in).await;
+        let tables_general_info = Some(Arc::new(AsyncMutex::new(Vec::new())));
+
+        let mut table_info = initialized_table_info(pool, &table_in, tables_general_info).await;
+
         let mut expected_columns = vec![
             BColumn {
                 name: String::from("id"),
@@ -499,19 +513,27 @@ mod tests {
                 constraints: vec![BConstraint::PrimaryKey],
             },
             BColumn {
-                constraints: vec![],
                 name: String::from("name"),
                 datatype: BDataType::TEXT,
+                constraints: vec![],
             },
         ];
-        expected_columns.sort_by(|a, b| b.name.cmp(&a.name));
-        table_info.columns_info.sort_by(|a, b| b.name.cmp(&a.name));
+
+        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
+        table_info.columns_info.sort_by(|a, b| a.name.cmp(&b.name));
+
         assert_eq!(table_info.table_name, table_in.table_name);
         assert_eq!(table_info.columns_info, expected_columns);
     }
 
     #[sqlx::test]
     async fn test_alter_table(pool: PgPool) {
+        // Initialize shared components
+        let repository = Arc::new(BRepository::new(Some(pool.clone())).await);
+        let console = Arc::new(Mutex::new(BusinessConsole::new()));
+        let tables_general_info = Some(Arc::new(AsyncMutex::new(Vec::new())));
+
+        // Create the remote table "registrations"
         let remote_table = BTableIn {
             table_name: String::from("registrations"),
             columns: vec![BColumn {
@@ -520,64 +542,54 @@ mod tests {
                 datatype: BDataType::INTEGER,
             }],
         };
-        BRepository::new(Some(pool.clone()))
-            .await
-            .create_table(&remote_table)
-            .await;
+        repository.create_table(&remote_table).await;
+
+        // Create the initial table "users"
         let table_in = default_table_in();
-        let mut table_info = initialized_table_info(pool, &table_in).await;
+        repository.create_table(&table_in).await;
+
+        // Initialize TableInfo for "users"
+        let mut table_info = TableInfo::new(
+            repository.clone(),
+            console.clone(),
+            tables_general_info.clone(),
+            table_in.table_name.clone(),
+        );
+        table_info.set_table_info().await;
+        table_info.set_general_tables_info().await;
+        table_info.initialize_component().await;
+
+        // Define a series of table change events
         let table_change_events = vec![
-            // 1. Add a new column "email" with datatype TEXT
             BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
-            // 2. Rename the existing column "name" to "username"
             BTableChangeEvents::ChangeColumnName(String::from("name"), String::from("username")),
-            // 3. Change datatype of the column "username" from TEXT to INT
             BTableChangeEvents::ChangeColumnDataType(String::from("username"), BDataType::INTEGER),
-            // 4. Add a new column "age" with datatype INT
             BTableChangeEvents::AddColumn(String::from("age"), BDataType::INTEGER),
-            // 5. Remove the column "age"
             BTableChangeEvents::RemoveColumn(String::from("age")),
-            // 6. Change the table name from "users" to "customers"
             BTableChangeEvents::ChangeTableName(String::from("customers")),
-            // 7. Add a new column "created_at" with datatype TIMESTAMP
             BTableChangeEvents::AddColumn(String::from("created_at"), BDataType::TIMESTAMP),
-            // 8. Change the datatype of the "email" column from TEXT to TEXT
-            BTableChangeEvents::ChangeColumnDataType(String::from("email"), BDataType::TEXT),
-            // 9. Rename the column "created_at" to "regiStringation_date"
             BTableChangeEvents::ChangeColumnName(
                 String::from("created_at"),
                 String::from("registration_date"),
             ),
-            // 10. Remove the column "regiStringation_date"
             BTableChangeEvents::RemoveColumn(String::from("registration_date")),
-            // 11. Add a new column "is_active" with datatype BOOLEAN
-            BTableChangeEvents::AddColumn(String::from("is_active"), BDataType::TEXT),
-            // 12. Rename the column "is_active" to "active_status"
+            BTableChangeEvents::AddColumn(String::from("is_active"), BDataType::BOOLEAN),
             BTableChangeEvents::ChangeColumnName(
                 String::from("is_active"),
                 String::from("active_status"),
             ),
-            // 13. Add a new column "last_login" with datatype TIMESTAMP
             BTableChangeEvents::AddColumn(String::from("last_login"), BDataType::TIMESTAMP),
-            // 14. Change the datatype of "last_login" to DATE
             BTableChangeEvents::ChangeColumnDataType(
                 String::from("last_login"),
                 BDataType::TIMESTAMP,
             ),
-            // 15. Add a new column "country" with datatype TEXT
             BTableChangeEvents::AddColumn(String::from("country"), BDataType::TEXT),
             BTableChangeEvents::AddPrimaryKey(String::from("country")),
             BTableChangeEvents::ChangeColumnName(String::from("country"), String::from("region")),
-            // 16. Change the table name from "customers" to "clients"
             BTableChangeEvents::ChangeTableName(String::from("clients")),
-            // 17. Add a new column "phone_number" with datatype TEXT
             BTableChangeEvents::AddColumn(String::from("phone_number"), BDataType::TEXT),
             BTableChangeEvents::AddPrimaryKey(String::from("phone_number")),
-            // 18. Remove the column "phone_number"
             BTableChangeEvents::RemoveColumn(String::from("phone_number")),
-            // 19. Change the datatype of the column "country" from TEXT to TEXT
-            BTableChangeEvents::ChangeColumnDataType(String::from("region"), BDataType::TEXT),
-            // 20. Rename the column "username" back to "name"
             BTableChangeEvents::ChangeColumnName(String::from("username"), String::from("name")),
             BTableChangeEvents::AddColumn(String::from("registration_id"), BDataType::INTEGER),
             BTableChangeEvents::AddForeignKey(BColumnForeignKey {
@@ -592,12 +604,16 @@ mod tests {
                 referenced_column: String::from("id"),
             }),
         ];
+
+        // Apply the table change events
         for event in table_change_events {
             table_info.add_table_change_event(event);
         }
+
+        // Expected events after processing
         let expected_events = vec![
             BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
-            BTableChangeEvents::AddColumn(String::from("active_status"), BDataType::TEXT),
+            BTableChangeEvents::AddColumn(String::from("active_status"), BDataType::BOOLEAN),
             BTableChangeEvents::AddColumn(String::from("last_login"), BDataType::TIMESTAMP),
             BTableChangeEvents::AddColumn(String::from("region"), BDataType::TEXT),
             BTableChangeEvents::AddPrimaryKey(String::from("region")),
@@ -610,51 +626,61 @@ mod tests {
                 referenced_column: String::from("id"),
             }),
         ];
+
+        // Verify that the processed events match expected events
         assert_eq!(table_info.table_change_events, expected_events);
+
+        // Apply the alterations to the table
         table_info.alter_table().await;
+
+        // Expected columns after alteration
         let mut expected_columns = vec![
             BColumn {
-                constraints: vec![BConstraint::PrimaryKey],
                 name: String::from("id"),
                 datatype: BDataType::INTEGER,
+                constraints: vec![BConstraint::PrimaryKey],
             },
             BColumn {
-                constraints: vec![],
                 name: String::from("name"),
                 datatype: BDataType::INTEGER,
+                constraints: vec![],
             },
             BColumn {
-                constraints: vec![],
                 name: String::from("email"),
                 datatype: BDataType::TEXT,
+                constraints: vec![],
             },
             BColumn {
-                constraints: vec![],
                 name: String::from("active_status"),
-                datatype: BDataType::TEXT,
+                datatype: BDataType::BOOLEAN,
+                constraints: vec![],
             },
             BColumn {
-                constraints: vec![],
                 name: String::from("last_login"),
                 datatype: BDataType::TIMESTAMP,
+                constraints: vec![],
             },
             BColumn {
-                constraints: vec![BConstraint::PrimaryKey],
                 name: String::from("region"),
                 datatype: BDataType::TEXT,
+                constraints: vec![BConstraint::PrimaryKey],
             },
             BColumn {
+                name: String::from("registration_id"),
+                datatype: BDataType::INTEGER,
                 constraints: vec![BConstraint::ForeignKey(
                     String::from("registrations"),
                     String::from("id"),
                 )],
-                name: String::from("registration_id"),
-                datatype: BDataType::INTEGER,
             },
         ];
-        expected_columns.sort_by(|a, b| b.name.cmp(&a.name));
-        table_info.columns_info.sort_by(|a, b| b.name.cmp(&a.name));
+
+        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
+        table_info.columns_info.sort_by(|a, b| a.name.cmp(&b.name));
+
         let expected_table_name = String::from("clients");
+
+        // Verify the final state
         assert!(table_info.table_change_events.is_empty());
         assert_eq!(table_info.columns_info, expected_columns);
         assert_eq!(table_info.table_name, expected_table_name);

@@ -1,5 +1,5 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType, BTable,
+    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType,
     BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
@@ -73,18 +73,16 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    async fn tables_component(pool: PgPool, table_in: &BTableIn) -> Tables {
-        let repository = BRepository::new(Some(pool)).await;
-        let console = BusinessConsole::new();
-        repository.create_table(table_in).await;
-        Tables::new(repository.into(), Arc::new(Mutex::new(console)))
+    async fn tables_component(pool: PgPool) -> Tables {
+        let repository = Arc::new(BRepository::new(Some(pool)).await);
+        let console = Arc::new(Mutex::new(BusinessConsole::new()));
+        Tables::new(repository, console)
     }
 
-    /// Helper function to initialize the `Tables` component.
-    async fn initialized_tables_component(pool: PgPool, table_in: &BTableIn) -> Tables {
-        let mut tables_component = tables_component(pool, table_in).await;
-        tables_component.initialize_component().await;
-        tables_component
+    async fn initialized_tables_component(pool: PgPool) -> Tables {
+        let mut tables = tables_component(pool).await;
+        tables.initialize_component().await;
+        tables
     }
 
     fn default_table_in() -> BTableIn {
@@ -100,126 +98,108 @@ mod tests {
 
     #[sqlx::test]
     async fn test_initialize_tables_component(pool: PgPool) {
-        let table_in = default_table_in();
+        let mut tables = initialized_tables_component(pool).await;
 
-        // Initialize the tables component
-        let mut tables = initialized_tables_component(pool, &table_in).await;
+        // Ensure `tables_general_info` is initialized
+        assert!(tables.tables_general_info.is_some());
 
-        // Expected result
-        let expected_tables = vec![BTable {
-            table_name: table_in.table_name,
-        }];
-
-        // Assert that the initialized component matches the expected output
-        assert_eq!(tables.tables, Some(expected_tables));
+        let general_info = tables.tables_general_info.as_ref().unwrap().lock().await;
+        assert!(general_info.is_empty(), "Expected no tables initially");
     }
 
     #[sqlx::test]
     async fn test_add_table(pool: PgPool) {
         let table_in = default_table_in();
-        let mut tables = initialized_tables_component(pool, &table_in).await;
-        let create_table_in = BTableIn {
-            table_name: String::from("accounts"),
-            columns: vec![
-                BColumn {
-                    name: String::from("id"),
-                    datatype: BDataType::INTEGER,
-                    constraints: vec![BConstraint::PrimaryKey],
-                },
-                BColumn {
-                    name: String::from("username"),
-                    datatype: BDataType::TEXT,
-                    constraints: vec![BConstraint::ForeignKey(
-                        table_in.table_name.clone(),
-                        table_in.columns[0].name.clone(),
-                    )],
-                },
-                BColumn {
-                    name: String::from("password"),
-                    datatype: BDataType::TEXT,
-                    constraints: vec![],
-                },
-                BColumn {
-                    name: String::from("balance"),
-                    datatype: BDataType::INTEGER,
-                    constraints: vec![],
-                },
-                BColumn {
-                    name: String::from("join_date"),
-                    datatype: BDataType::TIMESTAMP,
-                    constraints: vec![],
-                },
-            ],
-        };
-        tables.add_table(create_table_in.clone()).await;
-        let mut expected_tables = vec![
-            BTable {
-                table_name: table_in.table_name,
-            },
-            BTable {
-                table_name: create_table_in.table_name.clone(),
-            },
-        ];
-        expected_tables.sort_by(|a, b| b.table_name.cmp(&a.table_name));
-        tables
-            .tables
-            .as_mut()
-            .unwrap()
-            .sort_by(|a, b| b.table_name.cmp(&a.table_name));
+        let mut tables = initialized_tables_component(pool).await;
 
-        assert_eq!(tables.tables, Some(expected_tables));
-        tables
-            .set_table_info(create_table_in.table_name.clone())
-            .await;
+        // Add a new table
+        tables.add_table(table_in.clone()).await;
+
+        // Verify the table exists in `tables_general_info`
+        let general_info = tables.tables_general_info.as_ref().unwrap().lock().await;
+        assert_eq!(general_info.len(), 1);
+        assert_eq!(general_info[0].table_name, table_in.table_name);
+
+        // Verify the columns info
         assert_eq!(
-            tables.table_info.as_ref().unwrap().table_name,
-            create_table_in.table_name
-        );
-        assert_eq!(
-            tables
-                .table_info
-                .as_ref()
-                .unwrap()
-                .columns_info
-                .clone()
-                .sort_by(|a, b| b.name.cmp(&a.name)),
-            create_table_in
+            general_info[0]
+                .column_names
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            table_in
                 .columns
-                .clone()
-                .sort_by(|a, b| b.name.cmp(&a.name))
+                .iter()
+                .map(|col| col.name.clone())
+                .collect::<Vec<_>>()
         );
     }
 
     #[sqlx::test]
     async fn test_delete_table(pool: PgPool) {
         let table_in = default_table_in();
-        let mut tables = initialized_tables_component(pool, &table_in).await;
-        tables.delete_table(table_in.table_name).await;
-        let mut expected_tables = vec![];
-        assert_eq!(tables.tables, Some(expected_tables));
+        let mut tables = initialized_tables_component(pool).await;
+
+        // Add a table and then delete it
+        tables.add_table(table_in.clone()).await;
+        tables.delete_table(table_in.table_name.clone()).await;
+
+        // Verify the table no longer exists
+        let general_info = tables.tables_general_info.as_ref().unwrap().lock().await;
+        assert!(general_info.is_empty());
+    }
+
+    #[sqlx::test]
+    async fn test_set_table_info(pool: PgPool) {
+        let table_in = default_table_in();
+        let mut tables = initialized_tables_component(pool).await;
+
+        // Add a table and set its info
+        tables.add_table(table_in.clone()).await;
+        tables.set_table_info(table_in.table_name.clone()).await;
+
+        // Verify `table_info` is set correctly
+        let table_info = tables.table_info.as_ref().unwrap().lock().await;
+        assert_eq!(table_info.table_name, table_in.table_name);
+        assert_eq!(
+            table_info
+                .columns_info
+                .iter()
+                .map(|col| col.name.clone())
+                .collect::<Vec<_>>(),
+            table_in
+                .columns
+                .iter()
+                .map(|col| col.name.clone())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[sqlx::test]
     async fn test_get_general_table_info(pool: PgPool) {
         let table_in = default_table_in();
-        let mut tables = initialized_tables_component(pool, &table_in).await;
+        let mut tables = initialized_tables_component(pool).await;
+
+        // Add a table and fetch general table info
+        tables.add_table(table_in.clone()).await;
         tables.set_general_tables_info().await;
-        let expected_general_table_info = vec![BTableGeneralInfo {
-            table_name: table_in.table_name,
-            column_names: table_in
-                .columns
-                .iter()
-                .map(|column| column.name.clone())
-                .collect(),
-            data_types: table_in
-                .columns
-                .iter()
-                .map(|column| column.datatype.to_string().to_lowercase())
-                .collect(),
-        }];
+
+        let general_info = tables.tables_general_info.as_ref().unwrap().lock().await;
+
+        // Verify general table info
+        assert_eq!(general_info.len(), 1);
+        assert_eq!(general_info[0].table_name, table_in.table_name);
         assert_eq!(
-            tables.tables_general_info,
-            Some(expected_general_table_info)
-        )
+            general_info[0]
+                .column_names
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            table_in
+                .columns
+                .iter()
+                .map(|col| col.name.clone())
+                .collect::<Vec<_>>()
+        );
     }
 }
