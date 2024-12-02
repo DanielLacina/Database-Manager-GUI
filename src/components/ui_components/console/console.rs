@@ -13,6 +13,7 @@ use iced::{
     Alignment, Background, Border, Color, Element, Length, Shadow, Task, Theme, Vector,
 };
 use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct ConsoleUI {
