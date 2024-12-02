@@ -10,14 +10,14 @@ use tokio::sync::Mutex as AsyncMutex;
 pub struct TableInfo {
     repository: Arc<BRepository>,
     pub table_name: String,
-    pub columns_info: Vec<BColumn>,
-    pub tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
-    table_change_events: Vec<BTableChangeEvents>,
+    pub columns_info: Arc<AsyncMutex<Vec<BColumn>>>,
+    pub tables_general_info: Arc<AsyncMutex<Option<Vec<BTableGeneralInfo>>>>,
+    table_change_events: Arc<AsyncMutex<Vec<BTableChangeEvents>>>,
     console: Arc<Mutex<BusinessConsole>>,
 }
 
 impl BusinessComponent for TableInfo {
-    async fn initialize_component(&mut self) {
+    async fn initialize_component(&self) {
         self.set_table_info().await;
     }
 }
@@ -26,24 +26,25 @@ impl TableInfo {
     pub fn new(
         repository: Arc<BRepository>,
         console: Arc<Mutex<BusinessConsole>>,
-        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
+        tables_general_info: Arc<AsyncMutex<Option<Vec<BTableGeneralInfo>>>>,
         table_name: String,
     ) -> Self {
         Self {
             repository,
             table_name,
-            columns_info: vec![],
-            table_change_events: vec![],
+            columns_info: Arc::new(AsyncMutex::new(vec![])),
+            table_change_events: Arc::new(AsyncMutex::new(vec![])),
             console,
             tables_general_info,
         }
     }
 
     pub fn get_table_change_events(&self) -> Vec<BTableChangeEvents> {
-        self.table_change_events.clone()
+        let locked_table_change_events = *self.table_change_events.blocking_lock();
+        locked_table_change_events.clone()
     }
 
-    async fn set_table_info(&mut self) {
+    async fn set_table_info(&self) {
         let columns_info = self
             .repository
             .get_columns_info(&self.table_name)
@@ -56,7 +57,7 @@ impl TableInfo {
         self.columns_info = columns_info_with_enums;
     }
 
-    pub fn add_table_change_event(&mut self, table_change_event: BTableChangeEvents) {
+    pub fn add_table_change_event(&self, table_change_event: BTableChangeEvents) {
         match table_change_event {
             BTableChangeEvents::ChangeTableName(new_table_name) => {
                 self.handle_change_table_name(new_table_name);
@@ -90,7 +91,7 @@ impl TableInfo {
         locked_console.write(format!("{:?}", self.table_change_events));
     }
 
-    fn handle_add_column(&mut self, column_name: String, data_type: BDataType) {
+    fn handle_add_column(&self, column_name: String, data_type: BDataType) {
         if let Some(existing_event_index) = self.find_existing_remove_column_event(&column_name) {
             if let BTableChangeEvents::RemoveColumn(original_column_name) =
                 &self.table_change_events[existing_event_index]
@@ -118,7 +119,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_change_table_name(&mut self, table_name: String) {
+    fn handle_change_table_name(&self, table_name: String) {
         if let Some(existing_event_index) = self.find_existing_change_table_name_event() {
             if table_name == self.table_name {
                 self.table_change_events.remove(existing_event_index);
@@ -133,7 +134,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_change_column_datatype(&mut self, column_name: String, data_type: BDataType) {
+    fn handle_change_column_datatype(&self, column_name: String, data_type: BDataType) {
         if let Some(existing_event_index) =
             self.find_existing_change_data_type_column_event(&column_name)
         {
@@ -180,7 +181,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_change_column_name(&mut self, column_name: String, new_column_name: String) {
+    fn handle_change_column_name(&self, column_name: String, new_column_name: String) {
         if column_name == new_column_name {
             return;
         }
@@ -209,7 +210,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_remove_column(&mut self, column_name: String) {
+    fn handle_remove_column(&self, column_name: String) {
         if let Some(existing_event_index) = self.find_existing_add_primary_key_event(&column_name) {
             self.table_change_events.remove(existing_event_index);
         }
@@ -242,7 +243,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_add_primary_key(&mut self, column_name: String) {
+    fn handle_add_primary_key(&self, column_name: String) {
         if let Some(existing_event_index) =
             self.find_existing_remove_primary_key_event(&column_name)
         {
@@ -253,7 +254,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_remove_primary_key(&mut self, column_name: String) {
+    fn handle_remove_primary_key(&self, column_name: String) {
         if let Some(existing_event_index) = self.find_existing_add_primary_key_event(&column_name) {
             self.table_change_events.remove(existing_event_index);
         } else {
@@ -262,7 +263,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_add_foreign_key(&mut self, column_foreign_key: BColumnForeignKey) {
+    fn handle_add_foreign_key(&self, column_foreign_key: BColumnForeignKey) {
         // only one foreign key allowed
         if let Some(existing_event_index) =
             self.find_existing_add_foreign_key_event(&column_foreign_key.column_name)
@@ -280,7 +281,7 @@ impl TableInfo {
         }
     }
 
-    fn handle_remove_foreign_key(&mut self, column_name: String) {
+    fn handle_remove_foreign_key(&self, column_name: String) {
         if let Some(existing_event_index) = self.find_existing_add_foreign_key_event(&column_name) {
             self.table_change_events.remove(existing_event_index);
         } else {
@@ -289,7 +290,7 @@ impl TableInfo {
         }
     }
 
-    fn update_existing_rename_event(&mut self, event_index: usize, new_column_name: String) {
+    fn update_existing_rename_event(&self, event_index: usize, new_column_name: String) {
         if let BTableChangeEvents::ChangeColumnName(original_column_name, _) =
             self.table_change_events[event_index].clone()
         {
@@ -305,7 +306,7 @@ impl TableInfo {
     }
 
     fn update_existing_add_column_event(
-        &mut self,
+        &self,
         event_index: usize,
         column_name: String,
         new_column_name: String,
@@ -318,7 +319,7 @@ impl TableInfo {
         }
     }
 
-    fn rename_existing_datatype_change_event(&mut self, column_name: &str, new_column_name: &str) {
+    fn rename_existing_datatype_change_event(&self, column_name: &str, new_column_name: &str) {
         if let Some(event_index) = self.find_existing_change_data_type_column_event(column_name) {
             if let BTableChangeEvents::ChangeColumnDataType(original_column_name, data_type) =
                 self.table_change_events[event_index].clone()
@@ -395,7 +396,7 @@ impl TableInfo {
             .position(|event| matches!(event, BTableChangeEvents::ChangeTableName(_)))
     }
 
-    pub async fn set_general_tables_info(&mut self) {
+    pub async fn set_general_tables_info(&self) {
         if let Some(ref tables) = self.tables_general_info {
             let mut locked_tables = tables.lock().await;
             *locked_tables = self.repository.get_general_tables_info().await.unwrap();
@@ -405,7 +406,7 @@ impl TableInfo {
             )));
         }
     }
-    pub async fn alter_table(&mut self) {
+    pub async fn alter_table(&self) {
         if !self.table_change_events.is_empty() {
             let primary_key_column_names: Vec<String> = self
                 .columns_info
@@ -444,16 +445,18 @@ impl TableInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::business_components::component::repository_module::BRepositoryConsole;
     use sqlx::PgPool;
 
-    /// Helper function to create a `TableInfo` instance.
     async fn create_table_info(
         pool: PgPool,
         table_in: &BTableIn,
         tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
     ) -> TableInfo {
-        let repository = Arc::new(BRepository::new(Some(pool.clone())).await);
-        let console = Arc::new(Mutex::new(BusinessConsole::new()));
+        let database_console = Arc::new(AsyncMutex::new(BRepositoryConsole::new()));
+
+        let repository = Arc::new(BRepository::new(Some(pool), database_console.clone()).await);
+        let console = Arc::new(Mutex::new(BusinessConsole::new(database_console)));
         repository.create_table(table_in).await;
 
         let mut table_info = TableInfo::new(
@@ -526,7 +529,7 @@ mod tests {
     #[sqlx::test]
     async fn test_alter_table(pool: PgPool) {
         // Initialize shared components
-        let repository = Arc::new(BRepository::new(Some(pool.clone())).await);
+        let repository = Arc::new(BRepository::new(Some(pool)).await);
         let console = Arc::new(Mutex::new(BusinessConsole::new()));
         let tables_general_info = Some(Arc::new(AsyncMutex::new(Vec::new())));
 

@@ -26,7 +26,7 @@ impl Console {
     }
 
     pub fn clear_database_messages(&mut self) {
-        let locked_repository_console = self.repository_console.blocking_lock();
+        let mut locked_repository_console = self.repository_console.blocking_lock();
         locked_repository_console.clear_messages();
     }
 
