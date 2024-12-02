@@ -1,6 +1,6 @@
 use crate::components::business_components::{
     component::{
-        BColumn, BColumnForeignKey, BConstraint, BDataType, BTable, BTableChangeEvents,
+        BColumn, BColumnForeignKey, BConstraint, BDataType,  BTableChangeEvents,
         BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
     },
     components::BusinessTables,

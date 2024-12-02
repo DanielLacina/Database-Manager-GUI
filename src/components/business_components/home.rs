@@ -1,6 +1,5 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BDataType, BTable, BTableIn, BTableInfo,
-    BusinessComponent,
+    repository_module::BRepository, BColumn, BDataType, BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use std::sync::{Arc, Mutex};

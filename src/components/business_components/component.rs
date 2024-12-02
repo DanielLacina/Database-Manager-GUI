@@ -1,12 +1,9 @@
-use crate::components::business_components::database::models::{
-    ColumnsInfo, Table, TableGeneralInfo,
-};
+use crate::components::business_components::database::models::{ColumnsInfo, TableGeneralInfo};
 use crate::components::business_components::database::schemas::{
     Column, ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableIn,
 };
 use crate::components::business_components::tables::table_info::TableInfo;
 
-pub type BTable = Table;
 pub type BColumnsInfo = ColumnsInfo;
 pub type BColumn = Column;
 pub type BDataType = DataType;

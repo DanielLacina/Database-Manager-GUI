@@ -8,6 +8,7 @@ pub enum DataType {
     INTEGER,
     TIMESTAMP,
     SERIAL,
+    BOOLEAN,
 }
 
 impl Default for DataType {
@@ -23,6 +24,7 @@ impl fmt::Display for DataType {
             DataType::INTEGER => write!(f, "INTEGER"),
             DataType::TIMESTAMP => write!(f, "TIMESTAMP"),
             DataType::SERIAL => write!(f, "SERIAL"),
+            DataType::BOOLEAN => write!(f, "BOOLEAN"),
         }
     }
 }
@@ -34,6 +36,7 @@ impl DataType {
             "integer" => Self::INTEGER,
             "timestamp without time zone" => Self::TIMESTAMP,
             "serial" => Self::SERIAL,
+            "boolean" => Self::BOOLEAN,
             _ => panic!("Invalid datatype"),
         }
     }
