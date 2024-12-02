@@ -1,7 +1,7 @@
 use crate::components::business_components::{
     component::{
-        BColumn, BColumnForeignKey, BConstraint, BDataType,  BTableChangeEvents,
-        BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
+        BColumn, BColumnForeignKey, BConstraint, BDataType, BTableChangeEvents, BTableGeneralInfo,
+        BTableIn, BTableInfo, BusinessComponent,
     },
     components::BusinessTables,
 };
@@ -74,11 +74,12 @@ impl UIComponent for TableInfoUI {
             }
             Self::EventType::RemoveColumn(index) => {
                 if index < self.columns_display.len() {
-                    self.columns_display.remove(index);
                     if let Some(column) = self.columns_display.get_mut(index) {
+                        let column_name = column.name.clone();
+                        self.columns_display.remove(index);
                         return Task::done(
                             Self::EventType::AddTableChangeEvent(BTableChangeEvents::RemoveColumn(
-                                column.name.clone(),
+                                column_name,
                             ))
                             .message(),
                         );
