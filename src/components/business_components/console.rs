@@ -16,9 +16,18 @@ impl Console {
         }
     }
 
-    pub fn database_messages(&self) -> Vec<String> {
+    pub fn get_database_messages(&self) -> Vec<String> {
         let locked_repository_console = self.repository_console.blocking_lock();
         locked_repository_console.messages.clone()
+    }
+
+    pub fn clear_messages(&mut self) {
+        self.messages = vec![];
+    }
+
+    pub fn clear_database_messages(&mut self) {
+        let locked_repository_console = self.repository_console.blocking_lock();
+        locked_repository_console.clear_messages();
     }
 
     pub fn write(&mut self, message: String) {
