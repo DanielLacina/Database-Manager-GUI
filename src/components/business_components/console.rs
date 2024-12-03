@@ -4,33 +4,34 @@ use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct Console {
-    pub messages: Vec<String>,
-    repository_console: Arc<AsyncMutex<BRepositoryConsole>>,
+    pub messages: Arc<AsyncMutex<Vec<String>>>,
+    repository_console: Arc<BRepositoryConsole>,
 }
 
 impl Console {
-    pub fn new(repository_console: Arc<AsyncMutex<BRepositoryConsole>>) -> Self {
+    pub fn new(repository_console: Arc<BRepositoryConsole>) -> Self {
         Self {
-            messages: Vec::new(),
+            messages: Arc::new(AsyncMutex::new(Vec::new())),
             repository_console,
         }
     }
 
+    pub fn get_messages(&self) -> Vec<String> {
+        self.messages.blocking_lock().clone()
+    }
     pub fn get_database_messages(&self) -> Vec<String> {
-        let locked_repository_console = self.repository_console.blocking_lock();
-        locked_repository_console.messages.clone()
+        self.repository_console.messages.blocking_lock().clone()
     }
 
-    pub fn clear_messages(&mut self) {
-        self.messages = vec![];
+    pub fn clear_messages(&self) {
+        *self.messages.blocking_lock() = vec![];
     }
 
-    pub fn clear_database_messages(&mut self) {
-        let mut locked_repository_console = self.repository_console.blocking_lock();
-        locked_repository_console.clear_messages();
+    pub fn clear_database_messages(&self) {
+        self.repository_console.clear_messages();
     }
 
-    pub fn write(&mut self, message: String) {
-        self.messages.push(message);
+    pub fn write(&self, message: String) {
+        self.messages.blocking_lock().push(message);
     }
 }

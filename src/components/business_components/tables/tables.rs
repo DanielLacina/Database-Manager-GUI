@@ -10,42 +10,35 @@ use tokio::sync::Mutex as AsyncMutex;
 #[derive(Debug, Clone)]
 pub struct Tables {
     repository: Arc<BRepository>,
-    pub table_info: Arc<AsyncMutex<Option<TableInfo>>>,
-    pub tables_general_info: Arc<AsyncMutex<Option<Vec<BTableGeneralInfo>>>>,
-    pub console: Arc<Mutex<BusinessConsole>>,
+    pub table_info: Arc<TableInfo>,
+    pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneralInfo>>>,
+    pub console: Arc<BusinessConsole>,
 }
 
 impl BusinessComponent for Tables {
-    async fn initialize_component(&mut self) {
+    async fn initialize_component(&self) {
         self.update_tables().await;
     }
 }
 
 impl Tables {
-    pub fn new(repository: Arc<BRepository>, console: Arc<Mutex<BusinessConsole>>) -> Self {
+    pub fn new(repository: Arc<BRepository>, console: Arc<BusinessConsole>) -> Self {
+        let tables_general_info = Arc::new(AsyncMutex::new(vec![]));
         Self {
+            table_info: Arc::new(BTableInfo::new(
+                repository.clone(),
+                console.clone(),
+                tables_general_info.clone(),
+            )),
             repository,
-            table_info: Arc::new(AsyncMutex::new(None)),
-            tables_general_info: Arc::new(AsyncMutex::new(None)),
+            tables_general_info,
             console,
         }
     }
 
     pub async fn set_general_tables_info(&self) {
         let mut locked_tables = self.tables_general_info.lock().await;
-        *locked_tables = Some(self.repository.get_general_tables_info().await.unwrap());
-    }
-
-    pub async fn set_table_info(&self, table_name: String) {
-        let mut table_info = TableInfo::new(
-            self.repository.clone(),
-            self.console.clone(),
-            self.tables_general_info.clone(),
-            table_name,
-        );
-        table_info.initialize_component().await;
-        let mut locked_table_info = self.table_info.lock().await;
-        *locked_table_info = Some(table_info);
+        *locked_tables = self.repository.get_general_tables_info().await.unwrap();
     }
 
     pub async fn add_table(&self, table_in: BTableIn) {

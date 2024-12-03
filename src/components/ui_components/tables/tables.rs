@@ -32,7 +32,7 @@ pub struct TablesUI {
     pub table_filter: String,
     pub show_create_table_form: bool,
     pub create_table_form: CreateTableFormUI,
-    pub tables: Arc<AsyncMutex<BusinessTables>>,
+    pub tables: Arc<BusinessTables>,
     pub single_table_info: Option<TableInfoUI>,
     pub table_to_delete: Option<String>,
 }
@@ -70,17 +70,13 @@ impl UIComponent for TablesUI {
 
                 Task::perform(
                     async move {
-                        let mut locked_tables = tables.lock().await;
-                        locked_tables.set_table_info(table_name).await;
+                        tables.table_info.set_table_info(table_name).await;
                     },
                     |_| Self::EventType::SetSingleTableInfo.message(),
                 )
             }
             Self::EventType::SetSingleTableInfo => {
-                let locked_tables = self.tables.blocking_lock();
-                if let Some(table_info) = &locked_tables.table_info {
-                    self.single_table_info = Some(TableInfoUI::new(table_info.clone()));
-                }
+                self.single_table_info = Some(TableInfoUI::new(self.tables.table_info.clone()));
                 Task::none()
             }
             Self::EventType::UndisplayTableInfo => {
@@ -103,8 +99,7 @@ impl UIComponent for TablesUI {
                 let tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        let mut locked_tables = tables.lock().await;
-                        locked_tables.set_general_tables_info().await;
+                        tables.set_general_tables_info().await;
                     },
                     |_| Self::EventType::ComponentInitialized.message(),
                 )
@@ -124,8 +119,7 @@ impl UIComponent for TablesUI {
 
                     Task::perform(
                         async move {
-                            let mut locked_tables = tables.lock().await;
-                            locked_tables.delete_table(table_to_delete).await;
+                            tables.delete_table(table_to_delete).await;
                         },
                         |_| Self::EventType::SetTables.message(),
                     )
@@ -143,11 +137,11 @@ impl UIComponent for TablesUI {
 }
 
 impl TablesUI {
-    pub fn new(tables: Arc<AsyncMutex<BusinessTables>>) -> Self {
+    pub fn new(tables: Arc<BusinessTables>) -> Self {
         Self {
             table_filter: String::default(),
             show_create_table_form: false,
-            create_table_form: CreateTableFormUI::new(None, tables.clone()),
+            create_table_form: CreateTableFormUI::new(tables.clone()),
             tables,
             single_table_info: None,
             table_to_delete: None,
@@ -282,47 +276,43 @@ impl TablesUI {
         container(modal_content).padding(20).into()
     }
     fn tables_container<'a>(&'a self) -> Element<'a, Message> {
-        let locked_tables = self.tables.blocking_lock();
-        if let Some(tables) = locked_tables.tables_general_info.clone() {
-            let tables = tables.blocking_lock().clone();
-            let mut tables_column = Column::new().spacing(10).padding(10);
-            let table_filter_pattern = self.get_table_filter_regex();
+        let locked_tables_general_info = self.tables.tables_general_info.blocking_lock();
+        let mut tables_column = Column::new().spacing(10).padding(10);
+        let table_filter_pattern = self.get_table_filter_regex();
 
-            for table in tables
-                .into_iter()
-                .filter(|t| table_filter_pattern.is_match(&t.table_name))
-            {
-                let view_button = button(text(table.table_name.clone())).on_press(
-                    <TablesUI as UIComponent>::EventType::message(
-                        <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
-                            table.table_name.clone(),
-                        ),
+        for table in locked_tables_general_info
+            .clone()
+            .into_iter()
+            .filter(|t| table_filter_pattern.is_match(&t.table_name))
+        {
+            let view_button = button(text(table.table_name.clone())).on_press(
+                <TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::GetSingleTableInfo(
+                        table.table_name.clone(),
                     ),
-                );
+                ),
+            );
 
-                let delete_button = button(text("🗑️ Delete"))
-                    .style(|_, _| delete_button_style())
-                    .on_press(<TablesUI as UIComponent>::EventType::message(
-                        <TablesUI as UIComponent>::EventType::RequestDeleteTable(
-                            table.table_name.clone(),
-                        ),
-                    ));
+            let delete_button = button(text("🗑️ Delete"))
+                .style(|_, _| delete_button_style())
+                .on_press(<TablesUI as UIComponent>::EventType::message(
+                    <TablesUI as UIComponent>::EventType::RequestDeleteTable(
+                        table.table_name.clone(),
+                    ),
+                ));
 
-                let table_row = Row::new().spacing(10).push(view_button).push(delete_button);
+            let table_row = Row::new().spacing(10).push(view_button).push(delete_button);
 
-                tables_column = tables_column.push(table_row);
-            }
-
-            let content = scrollable(tables_column).height(Length::Fill);
-
-            if !self.table_to_delete.is_none() {
-                return self.delete_table_confirmation_modal();
-            }
-
-            content.into()
-        } else {
-            container(text("Loading")).height(Length::Fill).into()
+            tables_column = tables_column.push(table_row);
         }
+
+        let content = scrollable(tables_column).height(Length::Fill);
+
+        if !self.table_to_delete.is_none() {
+            return self.delete_table_confirmation_modal();
+        }
+
+        content.into()
     } // ======================== SECTION: Create Table ========================
 
     fn get_table_filter_regex(&self) -> Regex {

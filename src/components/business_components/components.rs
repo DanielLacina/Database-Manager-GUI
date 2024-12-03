@@ -13,25 +13,19 @@ pub type BusinessConsole = Console;
 
 #[derive(Debug, Clone)]
 pub struct BusinessComponents {
-    pub home: Arc<AsyncMutex<BusinessHome>>,
-    pub tables: Arc<AsyncMutex<BusinessTables>>,
-    pub console: Arc<Mutex<Console>>,
+    pub home: Arc<BusinessHome>,
+    pub tables: Arc<BusinessTables>,
+    pub console: Arc<Console>,
 }
 
 impl BusinessComponents {
     pub async fn new() -> Self {
-        let repository_console = Arc::new(AsyncMutex::new(BRepositoryConsole::new()));
+        let repository_console = Arc::new(BRepositoryConsole::new());
         let repository = Arc::new(BRepository::new(None, repository_console.clone()).await);
-        let console = Arc::new(Mutex::new(Console::new(repository_console.clone())));
+        let console = Arc::new(Console::new(repository_console.clone()));
         Self {
-            home: Arc::new(AsyncMutex::new(BusinessHome::new(
-                repository.clone(),
-                console.clone(),
-            ))),
-            tables: Arc::new(AsyncMutex::new(BusinessTables::new(
-                repository.clone(),
-                console.clone(),
-            ))),
+            home: Arc::new(BusinessHome::new(repository.clone(), console.clone())),
+            tables: Arc::new(BusinessTables::new(repository.clone(), console.clone())),
             console: console.clone(),
         }
     }

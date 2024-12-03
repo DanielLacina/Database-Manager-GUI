@@ -50,7 +50,7 @@ impl ForeignKeyDropdownEvents for TableInfoForeignKeyDropdown {
 
 #[derive(Debug, Clone)]
 pub struct TableInfoUI {
-    table_info: Arc<AsyncMutex<BTableInfo>>,
+    table_info: Arc<BTableInfo>,
     table_name_display: String,
     columns_display: Vec<BColumn>,
     active_foreign_key_dropdown: Option<ForeignKeyDropDownUI<TableInfoForeignKeyDropdown>>,
@@ -131,16 +131,20 @@ impl UIComponent for TableInfoUI {
                 let table_info = self.table_info.clone();
                 Task::perform(
                     async move {
-                        let mut locked_table_info = table_info.lock().await;
-                        locked_table_info.alter_table().await;
+                        table_info.alter_table().await;
                     },
                     |_| Self::EventType::UpdateTableInfo.message(),
                 )
             }
             Self::EventType::UpdateTableInfo => {
-                let locked_table_info = self.table_info.blocking_lock();
-                self.columns_display = locked_table_info.columns_info.clone();
-                self.table_name_display = locked_table_info.table_name.clone();
+                self.columns_display = self.table_info.columns_info.blocking_lock().clone();
+                self.table_name_display = self
+                    .table_info
+                    .table_name
+                    .blocking_lock()
+                    .as_ref()
+                    .unwrap()
+                    .clone();
                 Task::none()
             }
             Self::EventType::AddForeignKey(
@@ -224,25 +228,18 @@ impl UIComponent for TableInfoUI {
                 }
             }
             Self::EventType::AddTableChangeEvent(table_change_event) => {
-                let table_info = self.table_info.clone();
-                Task::perform(
-                    async move {
-                        let mut locked_table_info = table_info.lock().await;
-                        locked_table_info.add_table_change_event(table_change_event);
-                    },
-                    |_| Self::EventType::TableChangeEventDone.message(),
-                )
+                self.table_info.add_table_change_event(table_change_event);
+                Task::none()
             }
             Self::EventType::ToggleForeignKeyDropdown(index) => {
                 if let Some(column) = self.columns_display.get(index) {
-                    let locked_table_info = self.table_info.blocking_lock();
                     if let Some(foreign_key_dropdown) = &self.active_foreign_key_dropdown {
                         if foreign_key_dropdown.index == index {
                             self.active_foreign_key_dropdown = None;
                         } else {
                             self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
                                 column.clone(),
-                                locked_table_info.tables_general_info.clone(),
+                                self.table_info.tables_general_info.blocking_lock().clone(),
                                 TableInfoForeignKeyDropdown,
                                 None,
                                 index,
@@ -251,7 +248,7 @@ impl UIComponent for TableInfoUI {
                     } else {
                         self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
                             column.clone(),
-                            locked_table_info.tables_general_info.clone(),
+                            self.table_info.tables_general_info.blocking_lock().clone(),
                             TableInfoForeignKeyDropdown,
                             None,
                             index,
@@ -273,19 +270,27 @@ impl UIComponent for TableInfoUI {
 }
 
 impl TableInfoUI {
-    pub fn new(table_info: Arc<AsyncMutex<BTableInfo>>) -> Self {
-        let locked_table_info = table_info.blocking_lock();
+    pub fn new(table_info: Arc<BTableInfo>) -> Self {
         Self {
             table_info: table_info.clone(),
-            table_name_display: locked_table_info.table_name.clone(),
-            columns_display: locked_table_info.columns_info.clone(),
+            table_name_display: table_info
+                .table_name
+                .blocking_lock()
+                .as_ref()
+                .unwrap()
+                .clone(),
+            columns_display: table_info.columns_info.blocking_lock().clone(),
             active_foreign_key_dropdown: None,
         }
     }
 
     pub fn get_table_name(&self) -> String {
-        let locked_table_info = self.table_info.blocking_lock();
-        locked_table_info.table_name.clone()
+        self.table_info
+            .table_name
+            .blocking_lock()
+            .as_ref()
+            .unwrap()
+            .clone()
     }
 
     pub fn content<'a>(&'a self) -> Element<'a, Message> {

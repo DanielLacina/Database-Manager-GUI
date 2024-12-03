@@ -24,7 +24,7 @@ pub enum SelectedConsole {
 
 #[derive(Debug, Clone)]
 pub struct ConsoleUI {
-    console: Arc<Mutex<BusinessConsole>>,
+    console: Arc<BusinessConsole>,
     messages: Vec<String>,
     selected_console: SelectedConsole, // Track the selected tab
 }
@@ -44,12 +44,10 @@ impl UIComponent for ConsoleUI {
                         self.messages = vec![];
                     }
                     SelectedConsole::Business => {
-                        let mut locked_console = self.console.lock().unwrap();
-                        locked_console.clear_messages();
+                        self.console.clear_messages();
                     }
                     SelectedConsole::Database => {
-                        let mut locked_console = self.console.lock().unwrap();
-                        locked_console.clear_database_messages();
+                        self.console.clear_database_messages();
                     }
                 }
                 Task::none()
@@ -63,7 +61,7 @@ impl UIComponent for ConsoleUI {
 }
 
 impl ConsoleUI {
-    pub fn new(console: Arc<Mutex<BusinessConsole>>) -> Self {
+    pub fn new(console: Arc<BusinessConsole>) -> Self {
         Self {
             messages: vec![],
             console,
@@ -90,7 +88,7 @@ impl ConsoleUI {
             }
             SelectedConsole::Business => {
                 // Display business console messages
-                for message in self.console.lock().unwrap().messages.clone() {
+                for message in self.console.get_messages() {
                     let text_widget = Text::new(message)
                         .size(16)
                         .width(Length::Fill)
@@ -104,7 +102,7 @@ impl ConsoleUI {
             }
             SelectedConsole::Database => {
                 // Display database messages
-                for message in self.console.lock().unwrap().get_database_messages() {
+                for message in self.console.get_database_messages() {
                     let text_widget = Text::new(message)
                         .size(16)
                         .width(Length::Fill)

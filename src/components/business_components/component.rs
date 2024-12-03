@@ -15,7 +15,7 @@ pub type BConstraint = Constraint;
 pub type BColumnForeignKey = ColumnForeignKey;
 
 pub trait BusinessComponent {
-    async fn initialize_component(&mut self) {}
+    async fn initialize_component(&self) {}
 }
 
 pub(super) mod repository_module {
