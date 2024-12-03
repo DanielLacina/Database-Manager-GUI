@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
-    repository_module::BRepository, BColumn, BColumnsInfo, BConstraint, BDataType,
-    BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo, BusinessComponent,
+    repository_module::BRepository, BColumn, BConstraint, BDataType, BTableChangeEvents,
+    BTableGeneral, BTableIn, BTableInfo, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use crate::components::business_components::tables::table_info::TableInfo;
@@ -11,7 +11,7 @@ use tokio::sync::Mutex as AsyncMutex;
 pub struct Tables {
     repository: Arc<BRepository>,
     pub table_info: Arc<TableInfo>,
-    pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneralInfo>>>,
+    pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     console: Arc<BusinessConsole>,
 }
 
@@ -38,7 +38,12 @@ impl Tables {
 
     pub async fn set_general_tables_info(&self) {
         let mut locked_tables = self.tables_general_info.lock().await;
-        *locked_tables = self.repository.get_general_tables_info().await.unwrap();
+        let tables_general_info = self.repository.get_general_tables_info().await.unwrap();
+        let tables = tables_general_info
+            .into_iter()
+            .map(|table| BTableGeneral::to_table(table))
+            .collect();
+        *locked_tables = tables;
     }
 
     pub async fn add_table(&self, table_in: BTableIn) {
@@ -94,7 +99,7 @@ mod tests {
         let table_in = default_table_in();
         let tables = initialized_tables_component(pool, &table_in).await;
 
-        let expected_tables_general_info = vec![BTableGeneralInfo {
+        let expected_tables_general_info = vec![BTableGeneral {
             table_name: table_in.table_name.clone(),
             column_names: table_in
                 .columns
@@ -104,7 +109,7 @@ mod tests {
             data_types: table_in
                 .columns
                 .iter()
-                .map(|column| column.datatype.clone())
+                .map(|column| BDataType::to_datatype(column.datatype))
                 .collect(),
         }];
 

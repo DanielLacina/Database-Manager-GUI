@@ -1,5 +1,5 @@
 use crate::components::business_components::component::{
-    BColumn, BConstraint, BDataType, BTableGeneralInfo, BTableIn, BusinessComponent,
+    BColumn, BConstraint, BDataType, BTableGeneral, BTableIn, BusinessComponent,
 };
 use crate::components::ui_components::{
     component::{Event, UIComponent},
@@ -33,7 +33,7 @@ pub trait ForeignKeyDropdownEvents {
 
 #[derive(Debug, Clone)]
 pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
-    pub tables_general_info: Vec<BTableGeneralInfo>,
+    pub tables_general_info: Vec<BTableGeneral>,
     pub active_foreign_key_table_within_dropdown: Option<String>,
     pub column: BColumn,
     pub events: T,
@@ -43,7 +43,7 @@ pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
 impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
     pub fn new(
         column: BColumn,
-        tables_general_info: Vec<BTableGeneralInfo>,
+        tables_general_info: Vec<BTableGeneral>,
         events: T,
         active_foreign_key_table_within_dropdown: Option<String>,
         index: usize,
@@ -72,7 +72,7 @@ impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
             .into()
     }
 
-    fn foreign_key_table_row<'a>(&'a self, table: BTableGeneralInfo) -> Element<'a, Message> {
+    fn foreign_key_table_row<'a>(&'a self, table: BTableGeneral) -> Element<'a, Message> {
         let table_button = button(text(table.table_name.clone()))
             .style(|_, _| table_button_style())
             .on_press(
@@ -91,11 +91,9 @@ impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
         }
     }
 
-    fn foreign_key_column_picklist<'a>(&'a self, table: BTableGeneralInfo) -> Element<'a, Message> {
+    fn foreign_key_column_picklist<'a>(&'a self, table: BTableGeneral) -> Element<'a, Message> {
         let options: Vec<String> = zip(&table.column_names, &table.data_types)
-            .filter(|(_, datatype)| {
-                datatype.to_lowercase() == self.column.datatype.to_string().to_lowercase()
-            })
+            .filter(|(_, &ref datatype)| *datatype == self.column.datatype)
             .map(|(name, _)| name.clone())
             .collect();
         let selected: Option<String> = None;

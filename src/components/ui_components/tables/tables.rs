@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BColumn, BConstraint, BDataType, BTableGeneralInfo, BTableIn, BusinessComponent},
+    component::{BColumn, BConstraint, BDataType, BTableGeneral, BTableIn, BusinessComponent},
     components::BusinessTables,
 };
 use crate::components::ui_components::{

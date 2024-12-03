@@ -1,4 +1,4 @@
-use crate::components::business_components::database::models::ColumnsInfo;
+use crate::components::business_components::database::models::{ColumnsInfo, TableGeneralInfo};
 use std::fmt;
 use std::iter::zip;
 
@@ -78,6 +78,27 @@ pub struct Column {
     pub name: String,
     pub datatype: DataType,
     pub constraints: Vec<Constraint>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct TableGeneral {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub data_types: Vec<DataType>,
+}
+
+impl TableGeneral {
+    pub fn to_table(table_general_info: TableGeneralInfo) -> Self {
+        Self {
+            table_name: table_general_info.table_name,
+            column_names: table_general_info.column_names,
+            data_types: table_general_info
+                .data_types
+                .into_iter()
+                .map(|data_type| DataType::to_datatype(data_type))
+                .collect(),
+        }
+    }
 }
 
 impl Column {
