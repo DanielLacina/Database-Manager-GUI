@@ -63,10 +63,10 @@ mod tests {
     use sqlx::PgPool;
 
     async fn tables_component(pool: PgPool) -> Tables {
-        let database_console = Arc::new(AsyncMutex::new(BRepositoryConsole::new()));
+        let database_console = Arc::new(BRepositoryConsole::new());
 
         let repository = Arc::new(BRepository::new(Some(pool), database_console.clone()).await);
-        let console = Arc::new(Mutex::new(BusinessConsole::new(database_console)));
+        let console = Arc::new(BusinessConsole::new(database_console));
         Tables::new(repository, console)
     }
 

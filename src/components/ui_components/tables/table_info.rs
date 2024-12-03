@@ -131,12 +131,12 @@ impl UIComponent for TableInfoUI {
                 let table_info = self.table_info.clone();
                 Task::perform(
                     async move {
-                        table_info.alter_table().await;
+                        table_info.update_table().await;
                     },
-                    |_| Self::EventType::UpdateTableInfo.message(),
+                    |_| Self::EventType::UpdateTableInfoUI.message(),
                 )
             }
-            Self::EventType::UpdateTableInfo => {
+            Self::EventType::UpdateTableInfoUI => {
                 self.columns_display = self.table_info.columns_info.blocking_lock().clone();
                 self.table_name_display = self
                     .table_info

@@ -518,11 +518,12 @@ impl TableInfo {
             .iter()
             .position(|event| matches!(event, BTableChangeEvents::ChangeTableName(_)))
     }
+
     pub async fn alter_table(&self) {
-        let locked_events = self.table_change_events.lock().await;
+        let mut locked_table_change_events = self.table_change_events.lock().await;
         let mut locked_table_name = self.table_name.lock().await;
 
-        if !locked_events.is_empty() {
+        if !locked_table_change_events.is_empty() {
             let primary_key_column_names: Vec<String> = {
                 let locked_columns = self.columns_info.lock().await;
                 locked_columns
@@ -541,23 +542,27 @@ impl TableInfo {
                 .repository
                 .alter_table(
                     locked_table_name.as_ref().unwrap(),
-                    &*locked_events,
+                    &*locked_table_change_events,
                     &primary_key_column_names,
                 )
                 .await;
             println!("Alter table result: {:?}", res);
         }
 
-        for event in locked_events.iter() {
+        for event in locked_table_change_events.iter() {
             if let BTableChangeEvents::ChangeTableName(updated_table_name) = event {
                 *locked_table_name = Some(updated_table_name.clone());
             }
         }
 
         // Clear events
-        self.table_change_events.lock().await.clear();
-        self.set_table_info(locked_table_name.as_ref().unwrap().clone())
-            .await;
+        locked_table_change_events.clear();
+    }
+    pub async fn update_table(&self) {
+        self.alter_table().await;
+        let current_table_name = { self.table_name.lock().await.as_ref().unwrap().clone() };
+
+        self.set_table_info(current_table_name).await;
         self.set_general_tables_info().await;
     }
 

@@ -58,7 +58,7 @@ pub enum TableInfoMessage {
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
     SubmitUpdateTable,
-    UpdateTableInfo,
+    UpdateTableInfoUI,
     ToggleForeignKeyDropdown(usize),
     ToggleForeignKeyTable(usize, String),
     AddForeignKey(usize, String, String),
