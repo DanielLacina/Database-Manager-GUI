@@ -33,7 +33,7 @@ pub trait ForeignKeyDropdownEvents {
 
 #[derive(Debug, Clone)]
 pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
-    pub tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
+    pub tables_general_info: Vec<BTableGeneralInfo>,
     pub active_foreign_key_table_within_dropdown: Option<String>,
     pub column: BColumn,
     pub events: T,
@@ -43,7 +43,7 @@ pub struct ForeignKeyDropDownUI<T: ForeignKeyDropdownEvents> {
 impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
     pub fn new(
         column: BColumn,
-        tables_general_info: Option<Arc<AsyncMutex<Vec<BTableGeneralInfo>>>>,
+        tables_general_info: Vec<BTableGeneralInfo>,
         events: T,
         active_foreign_key_table_within_dropdown: Option<String>,
         index: usize,
@@ -58,27 +58,18 @@ impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
     }
 
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
-        if let Some(tables_general_info) = &self.tables_general_info {
-            let locked_tables_general_info = tables_general_info.blocking_lock().clone();
-            let dropdown = locked_tables_general_info.into_iter().fold(
-                Column::new()
-                    .spacing(10)
-                    .padding(10)
-                    .push(self.remove_foreign_key_button()),
-                |dropdown, table| dropdown.push(self.foreign_key_table_row(table)),
-            );
+        let dropdown = self.tables_general_info.clone().into_iter().fold(
+            Column::new()
+                .spacing(10)
+                .padding(10)
+                .push(self.remove_foreign_key_button()),
+            |dropdown, table| dropdown.push(self.foreign_key_table_row(table)),
+        );
 
-            scrollable(container(dropdown).padding(10).style(|_| dropdown_style()))
-                .height(Length::Shrink)
-                .width(150)
-                .into()
-        } else {
-            container(text("No tables available"))
-                .height(Length::Shrink)
-                .width(Length::FillPortion(2))
-                .style(|_| dropdown_style())
-                .into()
-        }
+        scrollable(container(dropdown).padding(10).style(|_| dropdown_style()))
+            .height(Length::Shrink)
+            .width(150)
+            .into()
     }
 
     fn foreign_key_table_row<'a>(&'a self, table: BTableGeneralInfo) -> Element<'a, Message> {

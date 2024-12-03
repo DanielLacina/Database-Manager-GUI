@@ -8,23 +8,24 @@ use tokio::sync::Mutex as AsyncMutex;
 #[derive(Debug, Clone)]
 pub struct Home {
     repository: Arc<BRepository>,
-    pub title: Option<String>,
-    console: Arc<Mutex<BusinessConsole>>,
+    pub title: Arc<AsyncMutex<Option<String>>>,
+    console: Arc<BusinessConsole>,
 }
 
 impl BusinessComponent for Home {
-    async fn initialize_component(&mut self) {
-        self.title = Some(String::from("Home Component"));
-        let mut locked_console = self.console.lock().unwrap();
-        locked_console.write(String::from("Home Component Initialized"));
+    async fn initialize_component(&self) {
+        let mut locked_title = self.title.lock().await;
+        *locked_title = Some(String::from("Home Component"));
+        self.console
+            .write(String::from("Home Component Initialized"));
     }
 }
 
 impl Home {
-    pub fn new(repository: Arc<BRepository>, console: Arc<Mutex<BusinessConsole>>) -> Self {
+    pub fn new(repository: Arc<BRepository>, console: Arc<BusinessConsole>) -> Self {
         Self {
             repository,
-            title: None,
+            title: Arc::new(AsyncMutex::new(None)),
             console,
         }
     }

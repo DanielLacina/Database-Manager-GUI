@@ -24,7 +24,7 @@ pub enum SelectedConsole {
 
 #[derive(Debug, Clone)]
 pub struct ConsoleUI {
-    console: Arc<Mutex<BusinessConsole>>,
+    console: Arc<BusinessConsole>,
     messages: Vec<String>,
     selected_console: SelectedConsole, // Track the selected tab
 }
@@ -38,8 +38,18 @@ impl UIComponent for ConsoleUI {
                 self.messages.push(message);
                 Task::none()
             }
-            Self::EventType::ClearMessages => {
-                self.messages = vec![];
+            Self::EventType::ClearMessages(selected_console) => {
+                match selected_console {
+                    SelectedConsole::UI => {
+                        self.messages = vec![];
+                    }
+                    SelectedConsole::Business => {
+                        self.console.clear_messages();
+                    }
+                    SelectedConsole::Database => {
+                        self.console.clear_database_messages();
+                    }
+                }
                 Task::none()
             }
             Self::EventType::SwitchTab(selected_console) => {
@@ -51,19 +61,13 @@ impl UIComponent for ConsoleUI {
 }
 
 impl ConsoleUI {
-    pub fn new(console: Arc<Mutex<BusinessConsole>>) -> Self {
+    pub fn new(console: Arc<BusinessConsole>) -> Self {
         Self {
             messages: vec![],
             console,
-            selected_console: SelectedConsole::UI, // Default to UI tab
+            selected_console: SelectedConsole::UI,
         }
     }
-
-    // Switch between different tabs (UI, Business, Database)
-    pub fn switch_tab(&mut self, console: SelectedConsole) {
-        self.selected_console = console;
-    }
-
     pub fn content(&self) -> Column<'_, Message> {
         let mut console_display = Column::new().spacing(10).padding(10);
 
@@ -84,7 +88,7 @@ impl ConsoleUI {
             }
             SelectedConsole::Business => {
                 // Display business console messages
-                for message in self.console.lock().unwrap().messages.clone() {
+                for message in self.console.get_messages() {
                     let text_widget = Text::new(message)
                         .size(16)
                         .width(Length::Fill)
@@ -98,7 +102,7 @@ impl ConsoleUI {
             }
             SelectedConsole::Database => {
                 // Display database messages
-                for message in self.console.lock().unwrap().get_database_messages() {
+                for message in self.console.get_database_messages() {
                     let text_widget = Text::new(message)
                         .size(16)
                         .width(Length::Fill)
@@ -123,10 +127,7 @@ impl ConsoleUI {
         .width(400)
         .style(|_, _| scrollbar_style());
 
-        let clear_button = button(Text::new("Clear Messages"))
-            .padding(10)
-            .on_press(ConsoleMessage::ClearMessages.message());
-
+        // Tab switch buttons
         let ui_button = button(Text::new("UI Messages")).on_press(
             <ConsoleUI as UIComponent>::EventType::SwitchTab(SelectedConsole::UI).message(),
         );
@@ -139,17 +140,42 @@ impl ConsoleUI {
             <ConsoleUI as UIComponent>::EventType::SwitchTab(SelectedConsole::Database).message(),
         );
 
-        Column::new()
-            .spacing(10)
-            .push(
-                Row::new()
-                    .spacing(10)
-                    .push(ui_button)
-                    .push(business_button)
-                    .push(database_button),
-            ) // Row for tab buttons
-            .push(scrollable_console)
-            .push(clear_button)
+        // Conditionally add the clear buttons for each tab
+        let clear_button = match self.selected_console {
+            SelectedConsole::UI => button(Text::new("Clear UI Messages")).padding(10).on_press(
+                <ConsoleUI as UIComponent>::EventType::ClearMessages(SelectedConsole::UI).message(),
+            ),
+
+            SelectedConsole::Business => button(Text::new("Clear Business Messages"))
+                .padding(10)
+                .on_press(
+                    <ConsoleUI as UIComponent>::EventType::ClearMessages(SelectedConsole::Business)
+                        .message(),
+                ),
+
+            SelectedConsole::Database => button(Text::new("Clear Database Messages"))
+                .padding(10)
+                .on_press(
+                    <ConsoleUI as UIComponent>::EventType::ClearMessages(SelectedConsole::Database)
+                        .message(),
+                ),
+        };
+
+        // Start building the column layout
+        let mut column = Column::new().spacing(10).push(
+            Row::new()
+                .spacing(10)
+                .push(ui_button)
+                .push(business_button)
+                .push(database_button),
+        ); // Row for tab buttons
+
+        column = column.push(scrollable_console);
+
+        // Add the clear button if it exists
+        column = column.push(clear_button);
+
+        column
     }
 }
 

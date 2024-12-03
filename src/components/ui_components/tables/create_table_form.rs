@@ -46,7 +46,7 @@ impl ForeignKeyDropdownEvents for CreateTableFormForeignKeyDropdownEvents {
 #[derive(Debug, Clone)]
 pub struct CreateTableFormUI {
     create_table_input: BTableIn,
-    tables: Arc<AsyncMutex<BusinessTables>>,
+    tables: Arc<BusinessTables>,
     active_foreign_key_dropdown:
         Option<ForeignKeyDropDownUI<CreateTableFormForeignKeyDropdownEvents>>, // column index that wants the foreign key dropdown
                                                                                // activated
@@ -151,8 +151,7 @@ impl UIComponent for CreateTableFormUI {
                 Task::perform(
                     async move {
                         let table_name = create_table_input.table_name.clone();
-                        let mut locked_tables = tables.lock().await;
-                        locked_tables.add_table(create_table_input).await;
+                        tables.add_table(create_table_input).await;
                         table_name
                     },
                     |table_name| Self::EventType::TableCreated(table_name).message(),
@@ -172,15 +171,16 @@ impl UIComponent for CreateTableFormUI {
             }
             Self::EventType::ToggleForeignKeyDropdown(index) => {
                 // Toggle the dropdown for the specified column
+                let locked_tables_general_info = self.tables.tables_general_info.blocking_lock();
+
                 if let Some(column) = self.create_table_input.columns.get(index) {
-                    let locked_tables = self.tables.blocking_lock();
                     if let Some(foreign_key_dropdown) = &self.active_foreign_key_dropdown {
                         if foreign_key_dropdown.index == index {
                             self.active_foreign_key_dropdown = None
                         } else {
                             self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
                                 column.clone(),
-                                locked_tables.tables_general_info.clone(),
+                                locked_tables_general_info.clone(),
                                 CreateTableFormForeignKeyDropdownEvents,
                                 None,
                                 index,
@@ -189,7 +189,7 @@ impl UIComponent for CreateTableFormUI {
                     } else {
                         self.active_foreign_key_dropdown = Some(ForeignKeyDropDownUI::new(
                             column.clone(),
-                            locked_tables.tables_general_info.clone(),
+                            locked_tables_general_info.clone(),
                             CreateTableFormForeignKeyDropdownEvents,
                             None,
                             index,
@@ -210,10 +210,7 @@ impl UIComponent for CreateTableFormUI {
 }
 
 impl CreateTableFormUI {
-    pub fn new(
-        tables_general_info: Option<Vec<BTableGeneralInfo>>,
-        tables: Arc<AsyncMutex<BusinessTables>>,
-    ) -> Self {
+    pub fn new(tables: Arc<BusinessTables>) -> Self {
         Self {
             create_table_input: BTableIn::default(),
             tables,

@@ -7,18 +7,16 @@ use crate::components::business_components::database::{
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::task;
 
 #[derive(Debug, Clone)]
 pub struct Repository {
     pool: PgPool,
-    console: Arc<AsyncMutex<RepositoryConsole>>,
+    console: Arc<RepositoryConsole>,
 }
 
 impl Repository {
-    pub async fn new(
-        existing_pool: Option<PgPool>,
-        console: Arc<AsyncMutex<RepositoryConsole>>,
-    ) -> Self {
+    pub async fn new(existing_pool: Option<PgPool>, console: Arc<RepositoryConsole>) -> Self {
         if let Some(pool) = existing_pool {
             Self { pool, console }
         } else {
@@ -262,8 +260,11 @@ impl Repository {
         for query in queries {
             let query_log = format!("Executing query: {}", query);
             println!("{}", query_log);
-            let mut locked_console = self.console.lock().await;
-            locked_console.write(query_log);
+            let console = self.console.clone();
+            task::spawn_blocking(move || {
+                console.write(query_log);
+            })
+            .await;
             sqlx::query(&query).execute(&mut *transaction).await?;
         }
 

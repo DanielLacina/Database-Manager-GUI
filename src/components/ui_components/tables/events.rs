@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BDataType,  BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo},
+    component::{BDataType, BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo},
     components::BusinessTables,
 };
 use crate::components::ui_components::{component::Event, events::Message};
@@ -58,7 +58,7 @@ pub enum TableInfoMessage {
     UpdateColumnType(usize, BDataType), // Event to update the type of a specific column
     UpdateTableName(String),
     SubmitUpdateTable,
-    UpdateTableInfo,
+    UpdateTableInfoUI,
     ToggleForeignKeyDropdown(usize),
     ToggleForeignKeyTable(usize, String),
     AddForeignKey(usize, String, String),
