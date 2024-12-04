@@ -247,13 +247,15 @@ impl Repository {
                 );
                 queries.push(drop_query);
             }
-            let add_query = format!(
-                "ALTER TABLE \"{}\" ADD CONSTRAINT pk_{} PRIMARY KEY ({})",
-                current_table_name,
-                current_table_name,
-                primary_key_columns.join(", ")
-            );
-            queries.push(add_query);
+            if !primary_key_columns.is_empty() {
+                let add_query = format!(
+                    "ALTER TABLE \"{}\" ADD CONSTRAINT pk_{} PRIMARY KEY ({})",
+                    current_table_name,
+                    current_table_name,
+                    primary_key_columns.join(", ")
+                );
+                queries.push(add_query);
+            }
         }
 
         // Execute each query in the transaction

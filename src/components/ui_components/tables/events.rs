@@ -1,5 +1,5 @@
 use crate::components::business_components::{
-    component::{BDataType, BTableChangeEvents, BTableGeneralInfo, BTableIn, BTableInfo},
+    component::{BDataType, BTableChangeEvents, BTableGeneral, BTableIn, BTableInfo},
     components::BusinessTables,
 };
 use crate::components::ui_components::{component::Event, events::Message};
