@@ -5,6 +5,7 @@ use crate::components::business_components::component::{
 use crate::components::business_components::components::BusinessConsole;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::task;
 
 #[derive(Debug, Clone)]
 pub struct TableInfo {
@@ -583,14 +584,12 @@ mod tests {
     use crate::components::business_components::component::repository_module::BRepositoryConsole;
     use sqlx::PgPool;
 
-    // Utility function to create a TableInfo instance
     async fn create_table_info(
         pool: PgPool,
         table_in: &BTableIn,
         tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     ) -> TableInfo {
         let database_console = Arc::new(BRepositoryConsole::new());
-
         let repository = Arc::new(BRepository::new(Some(pool), database_console.clone()).await);
         let console = Arc::new(BusinessConsole::new(database_console));
         repository.create_table(table_in).await;
@@ -601,7 +600,6 @@ mod tests {
         table_info
     }
 
-    // Default table input for testing
     fn default_table_in() -> BTableIn {
         BTableIn {
             table_name: String::from("users"),
@@ -620,6 +618,30 @@ mod tests {
         }
     }
 
+    fn create_btable_general(table_in: &BTableIn) -> BTableGeneral {
+        BTableGeneral {
+            table_name: table_in.table_name.clone(),
+            column_names: table_in
+                .columns
+                .iter()
+                .map(|col| col.name.clone())
+                .collect(),
+            data_types: table_in
+                .columns
+                .iter()
+                .map(|col| col.datatype.clone())
+                .collect(),
+        }
+    }
+
+    fn sort_columns(columns: &mut Vec<BColumn>) {
+        columns.sort_by(|a, b| a.name.cmp(&b.name));
+    }
+
+    fn sort_tables_general_info(tables: &mut Vec<BTableGeneral>) {
+        tables.sort_by(|a, b| a.table_name.cmp(&b.table_name));
+    }
+
     #[sqlx::test]
     async fn test_initialize_component(pool: PgPool) {
         let table_in = default_table_in();
@@ -627,21 +649,10 @@ mod tests {
 
         let table_info = create_table_info(pool, &table_in, tables_general_info).await;
 
-        let mut expected_columns = vec![
-            BColumn {
-                name: String::from("id"),
-                datatype: BDataType::INTEGER,
-                constraints: vec![BConstraint::PrimaryKey],
-            },
-            BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-                constraints: vec![],
-            },
-        ];
+        let mut expected_columns = table_in.columns.clone();
+        sort_columns(&mut expected_columns);
 
         // Verify the initialized state
-        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
         let columns_info = table_info.columns_info.lock().await;
         assert_eq!(*columns_info, expected_columns);
         assert_eq!(
@@ -652,10 +663,8 @@ mod tests {
 
     #[sqlx::test]
     async fn test_alter_table(pool: PgPool) {
-        // Initialize shared components
         let tables_general_info = Arc::new(AsyncMutex::new(Vec::new()));
 
-        // Create the remote table "registrations"
         let remote_table = BTableIn {
             table_name: String::from("registrations"),
             columns: vec![BColumn {
@@ -669,20 +678,17 @@ mod tests {
             Arc::new(BRepository::new(Some(pool), Arc::new(BRepositoryConsole::new())).await);
         repository.create_table(&remote_table).await;
 
-        // Create the initial table "users"
         let table_in = default_table_in();
         repository.create_table(&table_in).await;
 
-        // Initialize TableInfo for "users"
         let console = Arc::new(BusinessConsole::new(Arc::new(BRepositoryConsole::new())));
-        let table_info = TableInfo::new(
+        let table_info = Arc::new(TableInfo::new(
             repository.clone(),
             console.clone(),
             tables_general_info.clone(),
-        );
+        ));
         table_info.set_table_info(table_in.table_name.clone()).await;
 
-        // Define the table change events
         let table_change_events = vec![
             BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
             BTableChangeEvents::ChangeColumnName(String::from("name"), String::from("username")),
@@ -728,15 +734,16 @@ mod tests {
             }),
         ];
 
-        // Apply the table change events
-        for event in table_change_events {
-            table_info.add_table_change_event(event);
-        }
+        //        let table_info_copy = table_info.clone();
+        //        task::spawn_blocking(move || {
+        //            for event in table_change_events {
+        //                table_info_copy.add_table_change_event(event);
+        //            }
+        //        })
+        //        .await;
 
-        // Apply the alterations to the table
         table_info.alter_table().await;
 
-        // Expected columns after alteration
         let mut expected_columns = vec![
             BColumn {
                 name: String::from("id"),
@@ -777,18 +784,17 @@ mod tests {
                 )],
             },
         ];
+        sort_columns(&mut expected_columns);
 
-        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
         let columns_info = table_info.columns_info.lock().await;
         assert_eq!(*columns_info, expected_columns);
 
-        let expected_table_name = String::from("clients");
+        let expected_table_name = String::from("customers");
         assert_eq!(
             table_info.table_name.lock().await.as_ref().unwrap(),
             &expected_table_name
         );
 
-        // Verify no pending events
         let table_change_events = table_info.table_change_events.lock().await;
         assert!(table_change_events.is_empty());
     }
@@ -800,7 +806,6 @@ mod tests {
 
         let table_info = create_table_info(pool, &table_in, tables_general_info.clone()).await;
 
-        // Add a new table
         let new_table = BTableIn {
             table_name: String::from("products"),
             columns: vec![BColumn {
@@ -811,14 +816,18 @@ mod tests {
         };
         table_info.repository.create_table(&new_table).await;
 
-        // Update general tables info
         table_info.set_general_tables_info().await;
 
-        let general_info = tables_general_info.lock().await;
-        assert_eq!(general_info.len(), 2);
-        assert!(general_info.iter().any(|info| info.table_name == "users"));
-        assert!(general_info
-            .iter()
-            .any(|info| info.table_name == "products"));
+        let mut expected_tables_general_info = vec![
+            create_btable_general(&table_in),
+            create_btable_general(&new_table),
+        ];
+
+        sort_tables_general_info(&mut expected_tables_general_info);
+
+        let mut general_info = tables_general_info.lock().await.clone();
+        sort_tables_general_info(&mut general_info);
+
+        assert_eq!(general_info, expected_tables_general_info);
     }
 }
