@@ -1,6 +1,7 @@
 use crate::components::business_components::database::models::ColumnsInfo;
 use crate::components::business_components::database::schemas::{
     Column, ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableGeneral, TableIn,
+    TableInsertedData,
 };
 use crate::components::business_components::tables::table_info::TableInfo;
 
@@ -12,6 +13,7 @@ pub type BTableInfo = TableInfo;
 pub type BTableGeneral = TableGeneral;
 pub type BConstraint = Constraint;
 pub type BColumnForeignKey = ColumnForeignKey;
+pub type BTableInsertedData = TableInsertedData;
 
 pub trait BusinessComponent {
     async fn initialize_component(&self) {}

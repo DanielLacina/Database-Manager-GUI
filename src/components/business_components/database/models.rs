@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(sqlx::FromRow, Debug, Clone, PartialEq)]
 pub struct ColumnsInfo {
     pub column_name: String,

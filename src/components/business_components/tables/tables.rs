@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BConstraint, BDataType, BTableChangeEvents,
-    BTableGeneral, BTableIn, BTableInfo, BusinessComponent,
+    BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use crate::components::business_components::tables::table_info::TableInfo;
