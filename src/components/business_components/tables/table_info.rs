@@ -38,6 +38,14 @@ impl TableInfo {
     }
 
     pub async fn set_table_info(&self, table_name: String) {
+        let console = self.console.clone();
+        let table_change_events = self.table_change_events.clone();
+        task::spawn_blocking(move || {
+            let mut table_change_events = table_change_events.blocking_lock();
+            *table_change_events = vec![];
+
+            console.clear_messages()
+        });
         let columns_info = self.repository.get_columns_info(&table_name).await.unwrap();
         let columns_info_with_enums = columns_info
             .into_iter()

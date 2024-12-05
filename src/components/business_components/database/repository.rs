@@ -52,7 +52,6 @@ impl Repository {
         let res = sqlx::query_as::<_, TableGeneralInfo>(query)
             .fetch_all(&self.pool)
             .await;
-        self.log_query(query.to_string()).await;
         res
     }
 
@@ -91,8 +90,6 @@ impl Repository {
             .bind(parameters.0)
             .fetch_all(&self.pool)
             .await;
-        self.log_query(query.to_string().replace("$1", parameters.0))
-            .await;
         res
     }
 
@@ -108,7 +105,6 @@ impl Repository {
             .bind(table_name)
             .fetch_optional(&self.pool)
             .await;
-        self.log_query(query.to_string()).await;
         res
     }
 
@@ -271,10 +267,9 @@ impl Repository {
 
         // Execute each query in the transaction
         for query in queries {
-            let query = format!("Executing query: {}", query);
             println!("{}", query);
             sqlx::query(&query).execute(&mut *transaction).await?;
-            self.log_query(query);
+            self.log_query(query).await;
         }
 
         // Commit the transaction
