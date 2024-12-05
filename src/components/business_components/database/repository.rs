@@ -25,9 +25,16 @@ impl Repository {
         }
     }
 
+    async fn log_query(&self, query: String) {
+        let console = self.console.clone();
+        task::spawn_blocking(move || {
+            console.write(query);
+        })
+        .await;
+    }
+
     pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, sqlx::Error> {
-        let res = sqlx::query_as::<_, TableGeneralInfo>(
-            "SELECT
+        let query = "SELECT
                     t.table_name,
                     array_agg(c.column_name::TEXT) AS column_names,
                     array_agg(c.data_type::TEXT) AS data_types
@@ -41,10 +48,11 @@ impl Repository {
                     t.table_schema = 'public'
                     AND t.table_type = 'BASE TABLE'
                 GROUP BY
-                    t.table_name",
-        )
-        .fetch_all(&self.pool)
-        .await;
+                    t.table_name";
+        let res = sqlx::query_as::<_, TableGeneralInfo>(query)
+            .fetch_all(&self.pool)
+            .await;
+        self.log_query(query.to_string()).await;
         res
     }
 
@@ -52,36 +60,39 @@ impl Repository {
         &self,
         table_name: &str,
     ) -> Result<Vec<ColumnsInfo>, sqlx::Error> {
-        let res = sqlx::query_as::<_, ColumnsInfo>(
-            "SELECT
-                        c.column_name,
-                        c.data_type,
-                        ARRAY_AGG(tc.constraint_type::TEXT) AS constraint_types,
-                        ARRAY_AGG(ccu.table_name::TEXT) AS referenced_tables,
-                        ARRAY_AGG(ccu.column_name::TEXT) AS referenced_columns
-                    FROM
-                        information_schema.columns AS c
-                    LEFT JOIN
-                        information_schema.key_column_usage AS kcu
-                        ON c.table_name = kcu.table_name
-                        AND c.column_name = kcu.column_name
-                    LEFT JOIN
-                        information_schema.table_constraints AS tc
-                        ON tc.constraint_name = kcu.constraint_name
-                        AND tc.table_name = c.table_name
-                    LEFT JOIN
-                        information_schema.referential_constraints AS rc
-                        ON rc.constraint_name = tc.constraint_name
-                    LEFT JOIN
-                        information_schema.constraint_column_usage AS ccu
-                        ON ccu.constraint_name = rc.unique_constraint_name
-                    WHERE
-                        c.table_name = $1 
-                    GROUP BY c.column_name, c.data_type",
-        )
-        .bind(&table_name)
-        .fetch_all(&self.pool)
-        .await;
+        let query = "SELECT
+                            c.column_name,
+                            c.data_type,
+                            ARRAY_AGG(tc.constraint_type::TEXT) AS constraint_types,
+                            ARRAY_AGG(ccu.table_name::TEXT) AS referenced_tables,
+                            ARRAY_AGG(ccu.column_name::TEXT) AS referenced_columns
+                        FROM
+                            information_schema.columns AS c
+                        LEFT JOIN
+                            information_schema.key_column_usage AS kcu
+                            ON c.table_name = kcu.table_name
+                            AND c.column_name = kcu.column_name
+                        LEFT JOIN
+                            information_schema.table_constraints AS tc
+                            ON tc.constraint_name = kcu.constraint_name
+                            AND tc.table_name = c.table_name
+                        LEFT JOIN
+                            information_schema.referential_constraints AS rc
+                            ON rc.constraint_name = tc.constraint_name
+                        LEFT JOIN
+                            information_schema.constraint_column_usage AS ccu
+                            ON ccu.constraint_name = rc.unique_constraint_name
+                        WHERE
+                            c.table_name = $1 
+                        GROUP BY c.column_name, c.data_type";
+        let parameters = (table_name,);
+
+        let res = sqlx::query_as::<_, ColumnsInfo>(query)
+            .bind(parameters.0)
+            .fetch_all(&self.pool)
+            .await;
+        self.log_query(query.to_string().replace("$1", parameters.0))
+            .await;
         res
     }
 
@@ -89,15 +100,15 @@ impl Repository {
         &self,
         table_name: &str,
     ) -> Result<Option<PrimaryKeyConstraint>, sqlx::Error> {
-        let res = sqlx::query_as::<_, PrimaryKeyConstraint>(
-            "SELECT c.conname
+        let query = "SELECT c.conname
                 FROM pg_catalog.pg_constraint c
                 JOIN pg_class t ON t.oid = c.conrelid
-                WHERE t.relname = $1 AND c.contype ='p'",
-        )
-        .bind(table_name)
-        .fetch_optional(&self.pool)
-        .await;
+                WHERE t.relname = $1 AND c.contype ='p'";
+        let res = sqlx::query_as::<_, PrimaryKeyConstraint>(query)
+            .bind(table_name)
+            .fetch_optional(&self.pool)
+            .await;
+        self.log_query(query.to_string()).await;
         res
     }
 
@@ -153,13 +164,13 @@ impl Repository {
 
         // Execute the query
         sqlx::query(&query).execute(&self.pool).await.unwrap();
+        self.log_query(query).await;
     }
 
     pub async fn delete_table(&self, table_name: &str) {
-        sqlx::query(&format!("DROP TABLE \"{}\"", &table_name))
-            .execute(&self.pool)
-            .await
-            .unwrap();
+        let query = format!("DROP TABLE \"{}\"", &table_name);
+        sqlx::query(&query).execute(&self.pool).await.unwrap();
+        self.log_query(query).await;
     }
 
     pub async fn alter_table(
@@ -260,14 +271,10 @@ impl Repository {
 
         // Execute each query in the transaction
         for query in queries {
-            let query_log = format!("Executing query: {}", query);
-            println!("{}", query_log);
-            let console = self.console.clone();
-            task::spawn_blocking(move || {
-                console.write(query_log);
-            })
-            .await;
+            let query = format!("Executing query: {}", query);
+            println!("{}", query);
             sqlx::query(&query).execute(&mut *transaction).await?;
+            self.log_query(query);
         }
 
         // Commit the transaction
