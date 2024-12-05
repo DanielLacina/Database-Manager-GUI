@@ -5,6 +5,7 @@ use crate::components::business_components::component::{
 use crate::components::business_components::components::BusinessConsole;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::task;
 
 #[derive(Debug, Clone)]
 pub struct TableInfo {
@@ -59,43 +60,78 @@ impl TableInfo {
         *table_change_events = vec![];
     }
     pub fn add_table_change_event(&self, table_change_event: BTableChangeEvents) {
+        let mut locked_table_change_events = self.table_change_events.blocking_lock();
+
         match table_change_event {
             BTableChangeEvents::ChangeTableName(new_table_name) => {
-                self.handle_change_table_name(new_table_name);
+                self.handle_change_table_name(new_table_name, &mut locked_table_change_events);
             }
             BTableChangeEvents::ChangeColumnDataType(column_name, data_type) => {
-                self.handle_change_column_datatype(column_name, data_type);
+                self.handle_change_column_datatype(
+                    column_name,
+                    data_type,
+                    &mut locked_table_change_events,
+                );
             }
             BTableChangeEvents::ChangeColumnName(column_name, new_column_name) => {
-                self.handle_change_column_name(column_name, new_column_name);
+                self.handle_change_column_name(
+                    column_name,
+                    new_column_name,
+                    &mut locked_table_change_events,
+                );
             }
             BTableChangeEvents::RemoveColumn(column_name) => {
-                self.handle_remove_column(column_name);
+                self.handle_remove_column(column_name, &mut locked_table_change_events);
             }
             BTableChangeEvents::AddColumn(column_name, data_type) => {
-                self.handle_add_column(column_name, data_type);
+                self.handle_add_column(column_name, data_type, &mut locked_table_change_events);
             }
             BTableChangeEvents::AddForeignKey(column_foreign_key) => {
-                self.handle_add_foreign_key(column_foreign_key);
+                self.handle_add_foreign_key(column_foreign_key, &mut locked_table_change_events);
             }
             BTableChangeEvents::RemoveForeignKey(column_name) => {
-                self.handle_remove_foreign_key(column_name);
+                self.handle_remove_foreign_key(column_name, &mut locked_table_change_events);
             }
             BTableChangeEvents::AddPrimaryKey(column_name) => {
-                self.handle_add_primary_key(column_name);
+                self.handle_add_primary_key(column_name, &mut locked_table_change_events);
             }
             BTableChangeEvents::RemovePrimaryKey(column_name) => {
-                self.handle_remove_primary_key(column_name);
+                self.handle_remove_primary_key(column_name, &mut locked_table_change_events);
             }
         }
+
         self.console
-            .write(format!("{:?}", self.table_change_events));
+            .write(format!("{:?}", *locked_table_change_events));
     }
 
-    fn handle_add_column(&self, column_name: String, data_type: BDataType) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
+    fn handle_change_table_name(
+        &self,
+        table_name: String,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
+        let locked_table_name = self.table_name.blocking_lock();
         if let Some(existing_event_index) =
-            self.find_existing_remove_column_event_locked(&column_name, &locked_table_change_events)
+            self.find_existing_change_table_name_event_locked(locked_table_change_events)
+        {
+            if table_name == *locked_table_name.as_ref().unwrap() {
+                locked_table_change_events.remove(existing_event_index);
+            } else {
+                locked_table_change_events.remove(existing_event_index);
+                locked_table_change_events.push(BTableChangeEvents::ChangeTableName(table_name));
+            }
+        } else {
+            locked_table_change_events.push(BTableChangeEvents::ChangeTableName(table_name));
+        }
+    }
+
+    fn handle_add_column(
+        &self,
+        column_name: String,
+        data_type: BDataType,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
+        if let Some(existing_event_index) =
+            self.find_existing_remove_column_event_locked(&column_name, locked_table_change_events)
         {
             if let BTableChangeEvents::RemoveColumn(original_column_name) =
                 &locked_table_change_events[existing_event_index]
@@ -121,30 +157,17 @@ impl TableInfo {
         }
     }
 
-    fn handle_change_table_name(&self, table_name: String) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-        let locked_table_name = self.table_name.blocking_lock();
-        if let Some(existing_event_index) =
-            self.find_existing_change_table_name_event_locked(&locked_table_change_events)
-        {
-            if table_name == *locked_table_name.as_ref().unwrap() {
-                locked_table_change_events.remove(existing_event_index);
-            } else {
-                locked_table_change_events.remove(existing_event_index);
-                locked_table_change_events.push(BTableChangeEvents::ChangeTableName(table_name));
-            }
-        } else {
-            locked_table_change_events.push(BTableChangeEvents::ChangeTableName(table_name));
-        }
-    }
-
-    fn handle_change_column_datatype(&self, column_name: String, data_type: BDataType) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
+    fn handle_change_column_datatype(
+        &self,
+        column_name: String,
+        data_type: BDataType,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
         let locked_columns_info = self.columns_info.blocking_lock();
 
         if let Some(existing_event_index) = self.find_existing_change_data_type_column_event_locked(
             &column_name,
-            &locked_table_change_events,
+            locked_table_change_events,
         ) {
             if let Some(column) = locked_columns_info
                 .iter()
@@ -167,7 +190,7 @@ impl TableInfo {
                 ));
             }
         } else if let Some(existing_event_index) =
-            self.find_existing_add_column_event_locked(&column_name, &locked_table_change_events)
+            self.find_existing_add_column_event_locked(&column_name, locked_table_change_events)
         {
             if let BTableChangeEvents::AddColumn(_, added_column_data_type) =
                 &locked_table_change_events[existing_event_index]
@@ -186,35 +209,38 @@ impl TableInfo {
         }
     }
 
-    fn handle_change_column_name(&self, column_name: String, new_column_name: String) {
+    fn handle_change_column_name(
+        &self,
+        column_name: String,
+        new_column_name: String,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
         if column_name == new_column_name {
             return;
         }
 
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-
         self.rename_existing_datatype_change_event_locked(
             &column_name,
             &new_column_name,
-            &mut locked_table_change_events,
+            locked_table_change_events,
         );
 
         if let Some(existing_event_index) =
-            self.find_existing_rename_column_event_locked(&column_name, &locked_table_change_events)
+            self.find_existing_rename_column_event_locked(&column_name, locked_table_change_events)
         {
             self.update_existing_rename_event_locked(
                 existing_event_index,
                 new_column_name.clone(),
-                &mut locked_table_change_events,
+                locked_table_change_events,
             );
         } else if let Some(existing_event_index) =
-            self.find_existing_add_column_event_locked(&column_name, &locked_table_change_events)
+            self.find_existing_add_column_event_locked(&column_name, locked_table_change_events)
         {
             self.update_existing_add_column_event_locked(
                 existing_event_index,
                 column_name.clone(),
                 new_column_name.clone(),
-                &mut locked_table_change_events,
+                locked_table_change_events,
             );
         } else {
             locked_table_change_events.push(BTableChangeEvents::ChangeColumnName(
@@ -224,7 +250,7 @@ impl TableInfo {
         }
 
         if let Some(existing_event_index) = self
-            .find_existing_add_primary_key_event_locked(&column_name, &locked_table_change_events)
+            .find_existing_add_primary_key_event_locked(&column_name, locked_table_change_events)
         {
             locked_table_change_events.remove(existing_event_index);
             locked_table_change_events
@@ -232,33 +258,35 @@ impl TableInfo {
         }
     }
 
-    fn handle_remove_column(&self, column_name: String) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-
+    fn handle_remove_column(
+        &self,
+        column_name: String,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
         if let Some(existing_event_index) = self
-            .find_existing_add_primary_key_event_locked(&column_name, &locked_table_change_events)
+            .find_existing_add_primary_key_event_locked(&column_name, locked_table_change_events)
         {
             locked_table_change_events.remove(existing_event_index);
         }
         if let Some(existing_event_index) = self
-            .find_existing_add_foreign_key_event_locked(&column_name, &locked_table_change_events)
+            .find_existing_add_foreign_key_event_locked(&column_name, locked_table_change_events)
         {
             locked_table_change_events.remove(existing_event_index);
         }
         if let Some(existing_event_index) =
-            self.find_existing_add_column_event_locked(&column_name, &locked_table_change_events)
+            self.find_existing_add_column_event_locked(&column_name, locked_table_change_events)
         {
             locked_table_change_events.remove(existing_event_index);
         } else if let Some(existing_event_index) = self
             .find_existing_change_data_type_column_event_locked(
                 &column_name,
-                &locked_table_change_events,
+                locked_table_change_events,
             )
         {
             locked_table_change_events.remove(existing_event_index);
             locked_table_change_events.push(BTableChangeEvents::RemoveColumn(column_name));
         } else if let Some(existing_event_index) =
-            self.find_existing_rename_column_event_locked(&column_name, &locked_table_change_events)
+            self.find_existing_rename_column_event_locked(&column_name, locked_table_change_events)
         {
             if let BTableChangeEvents::ChangeColumnName(original_column_name, _) =
                 locked_table_change_events[existing_event_index].clone()
@@ -271,7 +299,6 @@ impl TableInfo {
             locked_table_change_events.push(BTableChangeEvents::RemoveColumn(column_name));
         }
     }
-
     fn rename_existing_datatype_change_event_locked(
         &self,
         column_name: &str,
@@ -324,25 +351,30 @@ impl TableInfo {
             locked_table_change_events[event_index].clone()
         {
             locked_table_change_events.remove(event_index);
-            self.handle_add_column(new_column_name, added_data_type);
+            self.handle_add_column(new_column_name, added_data_type, locked_table_change_events);
         }
     }
-    fn handle_add_primary_key(&self, column_name: String) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-        if let Some(existing_event_index) = self.find_existing_remove_primary_key_event_locked(
-            &column_name,
-            &locked_table_change_events,
-        ) {
+    fn handle_add_primary_key(
+        &self,
+        column_name: String,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
+        if let Some(existing_event_index) = self
+            .find_existing_remove_primary_key_event_locked(&column_name, locked_table_change_events)
+        {
             locked_table_change_events.remove(existing_event_index);
         } else {
             locked_table_change_events.push(BTableChangeEvents::AddPrimaryKey(column_name));
         }
     }
 
-    fn handle_remove_primary_key(&self, column_name: String) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
+    fn handle_remove_primary_key(
+        &self,
+        column_name: String,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
         if let Some(existing_event_index) = self
-            .find_existing_add_primary_key_event_locked(&column_name, &locked_table_change_events)
+            .find_existing_add_primary_key_event_locked(&column_name, locked_table_change_events)
         {
             locked_table_change_events.remove(existing_event_index);
         } else {
@@ -350,18 +382,21 @@ impl TableInfo {
         }
     }
 
-    fn handle_add_foreign_key(&self, column_foreign_key: BColumnForeignKey) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
+    fn handle_add_foreign_key(
+        &self,
+        column_foreign_key: BColumnForeignKey,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
         if let Some(existing_event_index) = self.find_existing_add_foreign_key_event_locked(
             &column_foreign_key.column_name,
-            &locked_table_change_events,
+            locked_table_change_events,
         ) {
             locked_table_change_events.remove(existing_event_index);
             locked_table_change_events.push(BTableChangeEvents::AddForeignKey(column_foreign_key));
         } else if let Some(existing_event_index) = self
             .find_existing_remove_foreign_key_event_locked(
                 &column_foreign_key.column_name,
-                &locked_table_change_events,
+                locked_table_change_events,
             )
         {
             locked_table_change_events.remove(existing_event_index);
@@ -370,62 +405,17 @@ impl TableInfo {
         }
     }
 
-    fn handle_remove_foreign_key(&self, column_name: String) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
+    fn handle_remove_foreign_key(
+        &self,
+        column_name: String,
+        locked_table_change_events: &mut Vec<BTableChangeEvents>,
+    ) {
         if let Some(existing_event_index) = self
-            .find_existing_add_foreign_key_event_locked(&column_name, &locked_table_change_events)
+            .find_existing_add_foreign_key_event_locked(&column_name, locked_table_change_events)
         {
             locked_table_change_events.remove(existing_event_index);
         } else {
             locked_table_change_events.push(BTableChangeEvents::RemoveForeignKey(column_name));
-        }
-    }
-
-    fn update_existing_rename_event(&self, event_index: usize, new_column_name: String) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-        if let BTableChangeEvents::ChangeColumnName(original_column_name, _) =
-            locked_table_change_events[event_index].clone()
-        {
-            if original_column_name != new_column_name {
-                locked_table_change_events.push(BTableChangeEvents::ChangeColumnName(
-                    original_column_name,
-                    new_column_name,
-                ));
-            }
-        }
-        locked_table_change_events.remove(event_index);
-    }
-
-    fn update_existing_add_column_event(
-        &self,
-        event_index: usize,
-        column_name: String,
-        new_column_name: String,
-    ) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-        if let BTableChangeEvents::AddColumn(_, added_data_type) =
-            locked_table_change_events[event_index].clone()
-        {
-            locked_table_change_events.remove(event_index);
-            self.handle_add_column(new_column_name, added_data_type);
-        }
-    }
-
-    fn rename_existing_datatype_change_event(&self, column_name: &str, new_column_name: &str) {
-        let mut locked_table_change_events = self.table_change_events.blocking_lock();
-        if let Some(event_index) = self.find_existing_change_data_type_column_event_locked(
-            column_name,
-            &locked_table_change_events,
-        ) {
-            if let BTableChangeEvents::ChangeColumnDataType(original_column_name, data_type) =
-                locked_table_change_events[event_index].clone()
-            {
-                locked_table_change_events.remove(event_index);
-                locked_table_change_events.push(BTableChangeEvents::ChangeColumnDataType(
-                    new_column_name.to_string(),
-                    data_type,
-                ));
-            }
         }
     }
 
@@ -519,7 +509,7 @@ impl TableInfo {
             .position(|event| matches!(event, BTableChangeEvents::ChangeTableName(_)))
     }
 
-    pub async fn alter_table(&self) {
+    async fn alter_table(&self) {
         let mut locked_table_change_events = self.table_change_events.lock().await;
         let mut locked_table_name = self.table_name.lock().await;
 
@@ -583,14 +573,12 @@ mod tests {
     use crate::components::business_components::component::repository_module::BRepositoryConsole;
     use sqlx::PgPool;
 
-    // Utility function to create a TableInfo instance
     async fn create_table_info(
         pool: PgPool,
         table_in: &BTableIn,
         tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     ) -> TableInfo {
         let database_console = Arc::new(BRepositoryConsole::new());
-
         let repository = Arc::new(BRepository::new(Some(pool), database_console.clone()).await);
         let console = Arc::new(BusinessConsole::new(database_console));
         repository.create_table(table_in).await;
@@ -601,7 +589,6 @@ mod tests {
         table_info
     }
 
-    // Default table input for testing
     fn default_table_in() -> BTableIn {
         BTableIn {
             table_name: String::from("users"),
@@ -620,6 +607,30 @@ mod tests {
         }
     }
 
+    fn create_btable_general(table_in: &BTableIn) -> BTableGeneral {
+        BTableGeneral {
+            table_name: table_in.table_name.clone(),
+            column_names: table_in
+                .columns
+                .iter()
+                .map(|col| col.name.clone())
+                .collect(),
+            data_types: table_in
+                .columns
+                .iter()
+                .map(|col| col.datatype.clone())
+                .collect(),
+        }
+    }
+
+    fn sort_columns(columns: &mut Vec<BColumn>) {
+        columns.sort_by(|a, b| a.name.cmp(&b.name));
+    }
+
+    fn sort_tables_general_info(tables: &mut Vec<BTableGeneral>) {
+        tables.sort_by(|a, b| a.table_name.cmp(&b.table_name));
+    }
+
     #[sqlx::test]
     async fn test_initialize_component(pool: PgPool) {
         let table_in = default_table_in();
@@ -627,21 +638,10 @@ mod tests {
 
         let table_info = create_table_info(pool, &table_in, tables_general_info).await;
 
-        let mut expected_columns = vec![
-            BColumn {
-                name: String::from("id"),
-                datatype: BDataType::INTEGER,
-                constraints: vec![BConstraint::PrimaryKey],
-            },
-            BColumn {
-                name: String::from("name"),
-                datatype: BDataType::TEXT,
-                constraints: vec![],
-            },
-        ];
+        let mut expected_columns = table_in.columns.clone();
+        sort_columns(&mut expected_columns);
 
         // Verify the initialized state
-        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
         let columns_info = table_info.columns_info.lock().await;
         assert_eq!(*columns_info, expected_columns);
         assert_eq!(
@@ -652,10 +652,8 @@ mod tests {
 
     #[sqlx::test]
     async fn test_alter_table(pool: PgPool) {
-        // Initialize shared components
         let tables_general_info = Arc::new(AsyncMutex::new(Vec::new()));
 
-        // Create the remote table "registrations"
         let remote_table = BTableIn {
             table_name: String::from("registrations"),
             columns: vec![BColumn {
@@ -669,20 +667,17 @@ mod tests {
             Arc::new(BRepository::new(Some(pool), Arc::new(BRepositoryConsole::new())).await);
         repository.create_table(&remote_table).await;
 
-        // Create the initial table "users"
         let table_in = default_table_in();
         repository.create_table(&table_in).await;
 
-        // Initialize TableInfo for "users"
         let console = Arc::new(BusinessConsole::new(Arc::new(BRepositoryConsole::new())));
-        let table_info = TableInfo::new(
+        let table_info = Arc::new(TableInfo::new(
             repository.clone(),
             console.clone(),
             tables_general_info.clone(),
-        );
+        ));
         table_info.set_table_info(table_in.table_name.clone()).await;
 
-        // Define the table change events
         let table_change_events = vec![
             BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
             BTableChangeEvents::ChangeColumnName(String::from("name"), String::from("username")),
@@ -728,15 +723,16 @@ mod tests {
             }),
         ];
 
-        // Apply the table change events
-        for event in table_change_events {
-            table_info.add_table_change_event(event);
-        }
+        let table_info_copy = table_info.clone();
+        task::spawn_blocking(move || {
+            for event in table_change_events {
+                table_info_copy.add_table_change_event(event);
+            }
+        })
+        .await;
 
-        // Apply the alterations to the table
-        table_info.alter_table().await;
+        table_info.update_table().await;
 
-        // Expected columns after alteration
         let mut expected_columns = vec![
             BColumn {
                 name: String::from("id"),
@@ -777,8 +773,8 @@ mod tests {
                 )],
             },
         ];
+        sort_columns(&mut expected_columns);
 
-        expected_columns.sort_by(|a, b| a.name.cmp(&b.name));
         let columns_info = table_info.columns_info.lock().await;
         assert_eq!(*columns_info, expected_columns);
 
@@ -788,7 +784,6 @@ mod tests {
             &expected_table_name
         );
 
-        // Verify no pending events
         let table_change_events = table_info.table_change_events.lock().await;
         assert!(table_change_events.is_empty());
     }
@@ -800,7 +795,6 @@ mod tests {
 
         let table_info = create_table_info(pool, &table_in, tables_general_info.clone()).await;
 
-        // Add a new table
         let new_table = BTableIn {
             table_name: String::from("products"),
             columns: vec![BColumn {
@@ -811,14 +805,18 @@ mod tests {
         };
         table_info.repository.create_table(&new_table).await;
 
-        // Update general tables info
         table_info.set_general_tables_info().await;
 
-        let general_info = tables_general_info.lock().await;
-        assert_eq!(general_info.len(), 2);
-        assert!(general_info.iter().any(|info| info.table_name == "users"));
-        assert!(general_info
-            .iter()
-            .any(|info| info.table_name == "products"));
+        let mut expected_tables_general_info = vec![
+            create_btable_general(&table_in),
+            create_btable_general(&new_table),
+        ];
+
+        sort_tables_general_info(&mut expected_tables_general_info);
+
+        let mut general_info = tables_general_info.lock().await.clone();
+        sort_tables_general_info(&mut general_info);
+
+        assert_eq!(general_info, expected_tables_general_info);
     }
 }

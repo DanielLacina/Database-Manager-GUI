@@ -99,7 +99,7 @@ impl UIComponent for TablesUI {
                 let tables = self.tables.clone();
                 Task::perform(
                     async move {
-                        tables.set_general_tables_info().await;
+                        tables.initialize_component().await;
                     },
                     |_| Self::EventType::ComponentInitialized.message(),
                 )
