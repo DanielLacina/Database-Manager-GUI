@@ -2,9 +2,12 @@ use crate::components::business_components::database::{
     console::RepositoryConsole,
     database::create_database_pool,
     models::{ColumnsInfo, PrimaryKeyConstraint, TableGeneralInfo},
-    schemas::{ColumnForeignKey, Constraint, TableChangeEvents, TableIn, TableInsertedData},
+    schemas::{
+        ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableIn, TableInsertedData,
+    },
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
+use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
@@ -181,13 +184,16 @@ impl Repository {
             .map(|row| {
                 format!(
                     "({})",
-                    zip(row, table_inserted_data.data_types)
-                        .map(|(column_value, datatype)| {
+                    zip(row, &table_inserted_data.data_types)
+                        // map each column value to datatype by index in both vectors
+                        // in order to wrap '' on values with text datatypes
+                        .map(|(column_value, ref datatype)| {
                             match datatype {
                                 DataType::TEXT => format!("'{}'", column_value),
-                                _ => column_value,
+                                _ => column_value.clone(),
                             }
                         })
+                        .collect::<Vec<String>>()
                         .join(", ")
                 )
             })

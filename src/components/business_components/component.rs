@@ -3,13 +3,16 @@ use crate::components::business_components::database::schemas::{
     Column, ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableGeneral, TableIn,
     TableInsertedData,
 };
-use crate::components::business_components::tables::table_info::TableInfo;
+use crate::components::business_components::tables::{
+    table_data_inserter::table_data_inserter::TableDataInserter, table_info::table_info::TableInfo,
+};
 
 pub type BColumn = Column;
 pub type BDataType = DataType;
 pub type BTableIn = TableIn;
 pub type BTableChangeEvents = TableChangeEvents;
 pub type BTableInfo = TableInfo;
+pub type BTableDataInserter = TableDataInserter;
 pub type BTableGeneral = TableGeneral;
 pub type BConstraint = Constraint;
 pub type BColumnForeignKey = ColumnForeignKey;

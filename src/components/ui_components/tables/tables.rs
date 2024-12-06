@@ -7,8 +7,8 @@ use crate::components::ui_components::{
     events::Message,
     tables::{
         create_table_form::CreateTableFormUI,
-        events::{CreateTableFormMessage, TableInfoMessage, TablesMessage},
-        table_info::TableInfoUI,
+        events::{CreateTableFormMessage, TablesMessage},
+        table_info::table_info::TableInfoUI,
     },
 };
 use iced::{
