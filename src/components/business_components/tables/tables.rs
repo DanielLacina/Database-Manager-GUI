@@ -35,6 +35,7 @@ impl Tables {
         Self {
             table_data_inserter: Arc::new(BTableDataInserter::new(
                 repository.clone(),
+                console.clone(),
                 table_info.clone(),
             )),
             table_info,
