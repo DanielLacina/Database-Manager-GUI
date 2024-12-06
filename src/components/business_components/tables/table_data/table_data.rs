@@ -1,7 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BConstraint, BDataType,
-    BTableChangeEvents, BTableDataInserter, BTableGeneral, BTableIn, BTableInfo,
-    BTableInsertedData, BusinessComponent,
+    BTableChangeEvents, BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use std::sync::{Arc, Mutex};
@@ -9,13 +8,13 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
 
 #[derive(Debug, Clone)]
-pub struct TableDataInserter {
+pub struct TableData {
     repository: Arc<BRepository>,
     table_info: Arc<BTableInfo>,
     console: Arc<BusinessConsole>,
 }
 
-impl TableDataInserter {
+impl TableData {
     pub fn new(
         repository: Arc<BRepository>,
         console: Arc<BusinessConsole>,
@@ -62,11 +61,11 @@ mod tests {
     };
     use sqlx::PgPool;
 
-    async fn create_table_data_inserter(
+    async fn create_table_data(
         pool: PgPool,
         table_in: &BTableIn,
         tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
-    ) -> TableDataInserter {
+    ) -> TableData {
         let (repository_result, console_result) =
             create_repository_table_and_console(pool, table_in).await;
         let table_info = BTableInfo::new(
@@ -74,9 +73,8 @@ mod tests {
             console_result.clone(),
             tables_general_info,
         );
-        let table_data_inserter =
-            TableDataInserter::new(repository_result, console_result, Arc::new(table_info));
-        table_data_inserter
+        let table_data = TableData::new(repository_result, console_result, Arc::new(table_info));
+        table_data
     }
 
     #[sqlx::test]
@@ -84,7 +82,6 @@ mod tests {
         let tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>> =
             Arc::new(AsyncMutex::new(Vec::new()));
         let table_in = default_table_in();
-        let table_data_inserter =
-            create_table_data_inserter(pool, &table_in, tables_general_info).await;
+        let table_data = create_table_data(pool, &table_in, tables_general_info).await;
     }
 }
