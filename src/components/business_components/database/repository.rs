@@ -2,9 +2,12 @@ use crate::components::business_components::database::{
     console::RepositoryConsole,
     database::create_database_pool,
     models::{ColumnsInfo, PrimaryKeyConstraint, TableGeneralInfo},
-    schemas::{ColumnForeignKey, Constraint, TableChangeEvents, TableIn},
+    schemas::{
+        ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableIn, TableInsertedData,
+    },
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
+use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
@@ -167,6 +170,40 @@ impl Repository {
         let query = format!("DROP TABLE \"{}\"", &table_name);
         sqlx::query(&query).execute(&self.pool).await.unwrap();
         self.log_query(query).await;
+    }
+
+    pub async fn insert_into_table(&self, table_inserted_data: TableInsertedData) {
+        let column_names: Vec<String> = table_inserted_data
+            .column_names
+            .iter()
+            .map(|column_name| format!("\"{}\"", column_name.clone()))
+            .collect();
+        let column_values: Vec<String> = table_inserted_data
+            .rows
+            .iter()
+            .map(|row| {
+                format!(
+                    "({})",
+                    zip(row, &table_inserted_data.data_types)
+                        // map each column value to datatype by index in both vectors
+                        // in order to wrap '' on values with text datatypes
+                        .map(|(column_value, ref datatype)| {
+                            match datatype {
+                                DataType::TEXT => format!("'{}'", column_value),
+                                _ => column_value.clone(),
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            })
+            .collect();
+        let query = format!(
+            "INSERT INTO \"{}\" ({}) VALUES {}",
+            table_inserted_data.table_name,
+            column_names.join(", "),
+            column_values.join(", ")
+        );
     }
 
     pub async fn alter_table(

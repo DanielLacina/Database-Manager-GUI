@@ -9,8 +9,8 @@ use crate::components::ui_components::console::events::ConsoleMessage;
 use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
-    tables::events::TableInfoMessage,
     tables::foreign_key_dropdown::{ForeignKeyDropDownUI, ForeignKeyDropdownEvents},
+    tables::table_info::events::TableInfoMessage,
 };
 use iced::{
     alignment::Vertical,

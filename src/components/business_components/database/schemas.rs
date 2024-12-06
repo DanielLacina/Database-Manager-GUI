@@ -1,4 +1,5 @@
 use crate::components::business_components::database::models::{ColumnsInfo, TableGeneralInfo};
+use std::collections::HashMap;
 use std::fmt;
 use std::iter::zip;
 
@@ -138,6 +139,14 @@ pub struct ColumnForeignKey {
     pub column_name: String,
     pub referenced_column: String,
     pub referenced_table: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct TableInsertedData {
+    pub table_name: String,
+    pub column_names: Vec<String>,
+    pub data_types: Vec<DataType>,
+    pub rows: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

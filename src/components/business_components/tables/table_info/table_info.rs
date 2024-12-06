@@ -1,8 +1,9 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BConstraint, BDataType,
-    BTableChangeEvents, BTableGeneral, BTableIn, BusinessComponent,
+    BTableChangeEvents, BTableGeneral, BTableInsertedData, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
+use crate::components::business_components::tables::utils::set_tables_general_info;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
@@ -35,6 +36,10 @@ impl TableInfo {
 
     pub fn get_table_change_events(&self) -> Vec<BTableChangeEvents> {
         self.table_change_events.blocking_lock().clone()
+    }
+
+    pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
+        self.repository.insert_into_table(table_inserted_data);
     }
 
     pub async fn set_table_info(&self, table_name: String) {
@@ -561,84 +566,38 @@ impl TableInfo {
         let current_table_name = { self.table_name.lock().await.as_ref().unwrap().clone() };
 
         self.set_table_info(current_table_name).await;
-        self.set_general_tables_info().await;
-    }
-
-    pub async fn set_general_tables_info(&self) {
-        let mut locked_tables = self.tables_general_info.lock().await;
-        let tables_general_info = self.repository.get_general_tables_info().await.unwrap();
-        let tables = tables_general_info
-            .into_iter()
-            .map(|table| BTableGeneral::to_table(table))
-            .collect();
-        *locked_tables = tables;
+        set_tables_general_info(self.repository.clone(), self.tables_general_info.clone()).await;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::business_components::component::repository_module::BRepositoryConsole;
+    use crate::components::business_components::component::{
+        repository_module::BRepositoryConsole, BTableIn,
+    };
+    use crate::components::business_components::tables::test_utils::{
+        create_btable_general, create_repository_table_and_console, default_table_in, sort_columns,
+        sort_tables_general_info,
+    };
     use sqlx::PgPool;
 
-    async fn create_table_info(
+    pub async fn create_table_info(
         pool: PgPool,
         table_in: &BTableIn,
         tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     ) -> TableInfo {
-        let database_console = Arc::new(BRepositoryConsole::new());
-        let repository = Arc::new(BRepository::new(Some(pool), database_console.clone()).await);
-        let console = Arc::new(BusinessConsole::new(database_console));
-        repository.create_table(table_in).await;
-
-        let table_info = TableInfo::new(repository, console, tables_general_info);
+        let (repository_result, console_result) =
+            create_repository_table_and_console(pool, table_in).await;
+        let table_info = TableInfo::new(
+            repository_result.clone(),
+            console_result,
+            tables_general_info.clone(),
+        );
         table_info.set_table_info(table_in.table_name.clone()).await;
-        table_info.set_general_tables_info().await; // Initialize tables_general_info
+        set_tables_general_info(repository_result, tables_general_info).await; // Initialize tables_general_info
         table_info
     }
-
-    fn default_table_in() -> BTableIn {
-        BTableIn {
-            table_name: String::from("users"),
-            columns: vec![
-                BColumn {
-                    name: String::from("id"),
-                    datatype: BDataType::INTEGER,
-                    constraints: vec![BConstraint::PrimaryKey],
-                },
-                BColumn {
-                    name: String::from("name"),
-                    datatype: BDataType::TEXT,
-                    constraints: vec![],
-                },
-            ],
-        }
-    }
-
-    fn create_btable_general(table_in: &BTableIn) -> BTableGeneral {
-        BTableGeneral {
-            table_name: table_in.table_name.clone(),
-            column_names: table_in
-                .columns
-                .iter()
-                .map(|col| col.name.clone())
-                .collect(),
-            data_types: table_in
-                .columns
-                .iter()
-                .map(|col| col.datatype.clone())
-                .collect(),
-        }
-    }
-
-    fn sort_columns(columns: &mut Vec<BColumn>) {
-        columns.sort_by(|a, b| a.name.cmp(&b.name));
-    }
-
-    fn sort_tables_general_info(tables: &mut Vec<BTableGeneral>) {
-        tables.sort_by(|a, b| a.table_name.cmp(&b.table_name));
-    }
-
     #[sqlx::test]
     async fn test_initialize_component(pool: PgPool) {
         let table_in = default_table_in();
@@ -671,20 +630,9 @@ mod tests {
             }],
         };
 
-        let repository =
-            Arc::new(BRepository::new(Some(pool), Arc::new(BRepositoryConsole::new())).await);
-        repository.create_table(&remote_table).await;
-
         let table_in = default_table_in();
-        repository.create_table(&table_in).await;
-
-        let console = Arc::new(BusinessConsole::new(Arc::new(BRepositoryConsole::new())));
-        let table_info = Arc::new(TableInfo::new(
-            repository.clone(),
-            console.clone(),
-            tables_general_info.clone(),
-        ));
-        table_info.set_table_info(table_in.table_name.clone()).await;
+        let table_info = create_table_info(pool, &table_in, tables_general_info).await;
+        table_info.repository.create_table(&remote_table).await;
 
         let table_change_events = vec![
             BTableChangeEvents::AddColumn(String::from("email"), BDataType::TEXT),
@@ -794,37 +742,5 @@ mod tests {
 
         let table_change_events = table_info.table_change_events.lock().await;
         assert!(table_change_events.is_empty());
-    }
-
-    #[sqlx::test]
-    async fn test_set_general_tables_info(pool: PgPool) {
-        let table_in = default_table_in();
-        let tables_general_info = Arc::new(AsyncMutex::new(Vec::new()));
-
-        let table_info = create_table_info(pool, &table_in, tables_general_info.clone()).await;
-
-        let new_table = BTableIn {
-            table_name: String::from("products"),
-            columns: vec![BColumn {
-                name: String::from("product_name"),
-                datatype: BDataType::TEXT,
-                constraints: vec![],
-            }],
-        };
-        table_info.repository.create_table(&new_table).await;
-
-        table_info.set_general_tables_info().await;
-
-        let mut expected_tables_general_info = vec![
-            create_btable_general(&table_in),
-            create_btable_general(&new_table),
-        ];
-
-        sort_tables_general_info(&mut expected_tables_general_info);
-
-        let mut general_info = tables_general_info.lock().await.clone();
-        sort_tables_general_info(&mut general_info);
-
-        assert_eq!(general_info, expected_tables_general_info);
     }
 }
