@@ -6,7 +6,7 @@ use crate::components::business_components::database::{
         ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableIn, TableInsertedData,
     },
 };
-use sqlx::{Executor, PgPool, Postgres, Transaction};
+use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Transaction};
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -167,9 +167,27 @@ impl Repository {
     }
 
     pub async fn delete_table(&self, table_name: &str) {
-        let query = format!("DROP TABLE \"{}\"", &table_name);
+        let query = format!("DROP TABLE \"{}\"", table_name);
         sqlx::query(&query).execute(&self.pool).await.unwrap();
         self.log_query(query).await;
+    }
+
+    pub async fn get_table_data_rows(
+        &self,
+        table_name: &str,
+        column_names: &Vec<String>,
+    ) -> Result<Vec<PgRow>, sqlx::Error> {
+        let select_column_names: Vec<String> = column_names
+            .into_iter()
+            .map(|column_name| format!("\"{}\"::TEXT", column_name))
+            .collect();
+        let query = format!(
+            "SELECT {} FROM \"{}\"",
+            select_column_names.join(", "),
+            table_name
+        );
+        let table_data_rows = sqlx::query(&query).fetch_all(&self.pool).await;
+        table_data_rows
     }
 
     pub async fn insert_into_table(&self, table_inserted_data: TableInsertedData) {

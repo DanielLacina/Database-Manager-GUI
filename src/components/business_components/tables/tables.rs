@@ -26,19 +26,18 @@ impl BusinessComponent for Tables {
 impl Tables {
     pub fn new(repository: Arc<BRepository>, console: Arc<BusinessConsole>) -> Self {
         let tables_general_info = Arc::new(AsyncMutex::new(vec![]));
-        let table_info = Arc::new(BTableInfo::new(
-            repository.clone(),
-            console.clone(),
-            tables_general_info.clone(),
-        ));
 
         Self {
             table_data: Arc::new(BTableData::new(
                 repository.clone(),
                 console.clone(),
-                table_info.clone(),
+                tables_general_info.clone(),
             )),
-            table_info,
+            table_info: Arc::new(BTableInfo::new(
+                repository.clone(),
+                console.clone(),
+                tables_general_info.clone(),
+            )),
             repository,
             tables_general_info,
             console,

@@ -3,6 +3,7 @@ use crate::components::business_components::component::{
     BTableChangeEvents, BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
+use sqlx::Row;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
@@ -10,20 +11,22 @@ use tokio::task;
 #[derive(Debug, Clone)]
 pub struct TableData {
     repository: Arc<BRepository>,
-    table_info: Arc<BTableInfo>,
     console: Arc<BusinessConsole>,
+    pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
+    pub table_inserted_data: Arc<AsyncMutex<Option<BTableInsertedData>>>,
 }
 
 impl TableData {
     pub fn new(
         repository: Arc<BRepository>,
         console: Arc<BusinessConsole>,
-        table_info: Arc<BTableInfo>,
+        tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     ) -> Self {
         Self {
             repository,
             console,
-            table_info,
+            tables_general_info,
+            table_inserted_data: Arc::new(AsyncMutex::new(None)),
         }
     }
 
@@ -31,20 +34,42 @@ impl TableData {
         self.repository.insert_into_table(table_inserted_data).await;
     }
 
-    pub fn get_column_names(&self) -> Option<Vec<String>> {
-        if let Some(table_name) = self.table_info.table_name.blocking_lock().as_ref() {
-            let tables_general_info = self.table_info.tables_general_info.blocking_lock();
-            let table_info_table_general_info = tables_general_info
-                .iter()
-                .find(|table| &table.table_name == table_name);
+    pub async fn set_table_data(&self, table_name: String) {
+        // Lock the general info table
+        let tables_general_info = self.tables_general_info.lock().await;
 
-            if let Some(table_general_info) = table_info_table_general_info {
-                Some(table_general_info.column_names.clone())
-            } else {
-                None
-            }
-        } else {
-            None
+        // Find the general info for the specified table
+        if let Some(table_general_info) = tables_general_info
+            .iter()
+            .find(|info| info.table_name == table_name)
+        {
+            // Fetch rows for the table
+            let table_data_rows = self
+                .repository
+                .get_table_data_rows(&table_name, &table_general_info.column_names)
+                .await
+                .unwrap();
+
+            // Construct the inserted data
+            let table_inserted_data = BTableInsertedData {
+                table_name: table_name.clone(),
+                column_names: table_general_info.column_names.clone(),
+                data_types: table_general_info.data_types.clone(),
+                rows: table_data_rows
+                    .iter()
+                    .map(|row| {
+                        table_general_info
+                            .column_names
+                            .iter()
+                            .map(|column_name| {
+                                row.try_get::<String, _>(column_name.as_str()).unwrap()
+                            })
+                            .collect::<Vec<String>>()
+                    })
+                    .collect::<Vec<Vec<String>>>(),
+            };
+            // Update the shared table inserted data
+            *self.table_inserted_data.lock().await = Some(table_inserted_data);
         }
     }
 }

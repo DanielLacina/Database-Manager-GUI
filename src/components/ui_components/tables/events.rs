@@ -3,17 +3,21 @@ use crate::components::business_components::{
     components::BusinessTables,
 };
 use crate::components::ui_components::{
-    component::Event, events::Message, tables::table_info::events::TableInfoMessage,
+    component::Event,
+    events::Message,
+    tables::{table_data::events::TableDataMessage, table_info::events::TableInfoMessage},
 };
 
 #[derive(Debug, Clone)]
 pub enum TablesMessage {
     UpdateTableFilter(String),
     ShowOrRemoveCreateTableForm,
+    ShowOrRemoveTableData,
     GetSingleTableInfo(String),
     SetSingleTableInfo,
     UndisplayTableInfo,
     SingleTableInfo(TableInfoMessage),
+    SingleTableData(TableDataMessage),
     CreateTableForm(CreateTableFormMessage),
     InitializeComponent,
     SetTables,
@@ -48,6 +52,6 @@ pub enum CreateTableFormMessage {
 
 impl Event for CreateTableFormMessage {
     fn message(self) -> Message {
-        TablesMessage::message(TablesMessage::CreateTableForm(self))
+        TablesMessage::CreateTableForm(self).message()
     }
 }
