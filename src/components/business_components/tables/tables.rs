@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BConstraint, BDataType, BTableChangeEvents,
-    BTableDataInserter, BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
+    BTableData, BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
 };
 
 use crate::components::business_components::components::BusinessConsole;
@@ -12,7 +12,7 @@ use tokio::sync::Mutex as AsyncMutex;
 pub struct Tables {
     repository: Arc<BRepository>,
     pub table_info: Arc<BTableInfo>,
-    pub table_data_inserter: Arc<BTableDataInserter>,
+    pub table_data: Arc<BTableData>,
     pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     console: Arc<BusinessConsole>,
 }
@@ -26,18 +26,18 @@ impl BusinessComponent for Tables {
 impl Tables {
     pub fn new(repository: Arc<BRepository>, console: Arc<BusinessConsole>) -> Self {
         let tables_general_info = Arc::new(AsyncMutex::new(vec![]));
-        let table_info = Arc::new(BTableInfo::new(
-            repository.clone(),
-            console.clone(),
-            tables_general_info.clone(),
-        ));
 
         Self {
-            table_data_inserter: Arc::new(BTableDataInserter::new(
+            table_data: Arc::new(BTableData::new(
                 repository.clone(),
-                table_info.clone(),
+                console.clone(),
+                tables_general_info.clone(),
             )),
-            table_info,
+            table_info: Arc::new(BTableInfo::new(
+                repository.clone(),
+                console.clone(),
+                tables_general_info.clone(),
+            )),
             repository,
             tables_general_info,
             console,

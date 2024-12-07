@@ -1,8 +1,8 @@
 use crate::components::business_components::{
     component::{
         repository_module::{BRepository, BRepositoryConsole},
-        BColumn, BConstraint, BDataType, BTableChangeEvents, BTableDataInserter, BTableGeneral,
-        BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
+        BColumn, BConstraint, BDataType, BTableChangeEvents, BTableData, BTableGeneral, BTableIn,
+        BTableInfo, BTableInsertedData, BusinessComponent,
     },
     components::BusinessConsole,
 };

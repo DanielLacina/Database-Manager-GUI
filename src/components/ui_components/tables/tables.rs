@@ -8,6 +8,7 @@ use crate::components::ui_components::{
     tables::{
         create_table_form::CreateTableFormUI,
         events::{CreateTableFormMessage, TablesMessage},
+        table_data::table_data::TableDataUI,
         table_info::table_info::TableInfoUI,
     },
 };
@@ -34,6 +35,8 @@ pub struct TablesUI {
     pub create_table_form: CreateTableFormUI,
     pub tables: Arc<BusinessTables>,
     pub single_table_info: Option<TableInfoUI>,
+    pub show_single_table_data: bool,
+    pub single_table_data: TableDataUI,
     pub table_to_delete: Option<String>,
 }
 
@@ -50,6 +53,14 @@ impl UIComponent for TablesUI {
                 self.show_create_table_form = !self.show_create_table_form;
                 self.create_table_form
                     .update(CreateTableFormMessage::ShowOrRemoveCreateTableForm)
+            }
+            Self::EventType::ShowOrRemoveTableData => {
+                if self.show_single_table_data {
+                    self.show_single_table_data = false;
+                } else {
+                    self.show_single_table_data = true;
+                }
+                Task::none()
             }
             Self::EventType::CreateTableForm(create_table_form_message) => {
                 match &create_table_form_message {
@@ -89,6 +100,9 @@ impl UIComponent for TablesUI {
                 } else {
                     Task::none()
                 }
+            }
+            Self::EventType::SingleTableData(table_data_message) => {
+                self.single_table_data.update(table_data_message)
             }
 
             Self::EventType::RequestDeleteTable(table_name) => {
@@ -141,7 +155,9 @@ impl TablesUI {
         Self {
             table_filter: String::default(),
             show_create_table_form: false,
+            show_single_table_data: false,
             create_table_form: CreateTableFormUI::new(tables.clone()),
+            single_table_data: TableDataUI::new(tables.table_data.clone()),
             tables,
             single_table_info: None,
             table_to_delete: None,
@@ -173,6 +189,10 @@ impl TablesUI {
             table_info_section = table_info_section.push(undisplay_button);
 
             row = row.push(container(table_info_section).width(Length::Fill));
+        }
+
+        if self.show_single_table_data {
+            row = row.push(container(self.single_table_data.content()).width(Length::Fill));
         }
 
         container(row)
@@ -207,9 +227,19 @@ impl TablesUI {
         .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveCreateTableForm.message())
         .padding(10);
 
+        let toggle_table_data_button = button(if self.show_single_table_data {
+            "Remove table data"
+        } else {
+            "Show table_data"
+        })
+        .style(|_, _| button_style())
+        .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveTableData.message())
+        .padding(10);
+
         Column::new()
             .push(scrollable_section)
             .push(toggle_form_button)
+            .push(toggle_table_data_button)
             .spacing(10)
             .padding(10)
             .width(Length::Fill)
