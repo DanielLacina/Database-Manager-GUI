@@ -1,6 +1,6 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BConstraint, BDataType,
-    BTableChangeEvents, BTableGeneral, BTableInsertedData, BusinessComponent,
+    BTableChangeEvents, BTableData, BTableGeneral, BTableInsertedData, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use crate::components::business_components::tables::utils::set_tables_general_info;
@@ -16,6 +16,7 @@ pub struct TableInfo {
     pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     table_change_events: Arc<AsyncMutex<Vec<BTableChangeEvents>>>,
     console: Arc<BusinessConsole>,
+    table_data: Arc<BTableData>,
 }
 
 impl TableInfo {
@@ -23,6 +24,7 @@ impl TableInfo {
         repository: Arc<BRepository>,
         console: Arc<BusinessConsole>,
         tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
+        table_data: Arc<BTableData>,
     ) -> Self {
         Self {
             repository,
@@ -31,6 +33,7 @@ impl TableInfo {
             table_change_events: Arc::new(AsyncMutex::new(vec![])),
             console,
             tables_general_info,
+            table_data,
         }
     }
 
@@ -567,6 +570,10 @@ impl TableInfo {
 
         self.set_table_info(current_table_name).await;
         set_tables_general_info(self.repository.clone(), self.tables_general_info.clone()).await;
+        let locked_table_name = self.table_name.lock().await;
+        self.table_data
+            .set_table_data(locked_table_name.as_ref().unwrap().clone())
+            .await;
     }
 }
 
@@ -589,10 +596,16 @@ mod tests {
     ) -> TableInfo {
         let (repository_result, console_result) =
             create_repository_table_and_console(pool, table_in).await;
+        let table_data = Arc::new(BTableData::new(
+            repository_result.clone(),
+            console_result.clone(),
+            Arc::new(AsyncMutex::new(Vec::new())),
+        ));
         let table_info = TableInfo::new(
             repository_result.clone(),
             console_result,
             tables_general_info.clone(),
+            table_data,
         );
         table_info.set_table_info(table_in.table_name.clone()).await;
         set_tables_general_info(repository_result, tables_general_info).await; // Initialize tables_general_info

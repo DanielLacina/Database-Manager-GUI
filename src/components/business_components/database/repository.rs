@@ -179,7 +179,12 @@ impl Repository {
     ) -> Result<Vec<PgRow>, sqlx::Error> {
         let select_column_names: Vec<String> = column_names
             .into_iter()
-            .map(|column_name| format!("\"{}\"::TEXT", column_name))
+            .map(|column_name| {
+                format!(
+                    "COALESCE(\"{}\"::TEXT, '') AS \"{}\"",
+                    column_name, column_name
+                )
+            })
             .collect();
         let query = format!(
             "SELECT {} FROM \"{}\"",

@@ -10,6 +10,7 @@ use crate::components::ui_components::{
 pub enum TableDataMessage {
     GetTableData(String),
     SetTableData,
+    UpdateCell(usize, usize, String),
 }
 
 impl Event for TableDataMessage {
