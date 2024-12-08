@@ -1,6 +1,7 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BConstraint, BDataType,
-    BTableChangeEvents, BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
+    BRowColumnValue, BTableChangeEvents, BTableDataChangeEvents, BTableGeneral, BTableIn,
+    BTableInfo, BTableInsertedData, BusinessComponent,
 };
 use crate::components::business_components::components::BusinessConsole;
 use sqlx::Row;
@@ -14,6 +15,7 @@ pub struct TableData {
     console: Arc<BusinessConsole>,
     pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     pub table_inserted_data: Arc<AsyncMutex<Option<BTableInsertedData>>>,
+    pub table_data_change_events: Arc<AsyncMutex<Vec<BTableDataChangeEvents>>>,
 }
 
 impl TableData {
@@ -27,13 +29,59 @@ impl TableData {
             console,
             tables_general_info,
             table_inserted_data: Arc::new(AsyncMutex::new(None)),
+            table_data_change_events: Arc::new(AsyncMutex::new(vec![])),
         }
+    }
+
+    pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEvents) {
+        let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
+
+        match &table_data_change_event {
+            BTableDataChangeEvents::ModifyRowColumnValue(row_column_value) => {
+                if let Some(existing_event_index) = locked_table_data_change_events.iter().position(
+                    |existing_event| matches!(existing_event, 
+                        BTableDataChangeEvents::ModifyRowColumnValue(existing_row_column_value)
+                        if existing_row_column_value.row_number == row_column_value.row_number
+                            && existing_row_column_value.column_name == row_column_value.column_name
+                    ),
+                ) {
+                    // Replace the existing event
+                    locked_table_data_change_events.remove(existing_event_index);
+                    locked_table_data_change_events.push(table_data_change_event);
+
+                } else {
+                            
+                    locked_table_data_change_events.push(table_data_change_event);
+                        }
+            }
+        }
+        self.console.write(format!("{:?}", locked_table_data_change_events));
+
+    // Add the new event if no matching event was found
     }
 
     pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
         self.repository.insert_into_table(table_inserted_data).await;
     }
 
+    pub async fn update_table_data(&self) {
+    // Extract and drop the lock on `table_inserted_data`
+    let (table_name, table_data_change_events) = {
+        let table_inserted_data_guard = self.table_inserted_data.lock().await;
+        if let Some(ref table_inserted_data) = *table_inserted_data_guard {
+            let table_name = table_inserted_data.table_name.clone();
+            let table_data_change_events_guard = self.table_data_change_events.lock().await;
+            let table_data_change_events = table_data_change_events_guard.clone();
+            (table_name, table_data_change_events)
+        } else {
+            return; // If there's no table_inserted_data, exit the function
+        }
+    };
+
+    // Use the extracted values without holding the locks
+    self.repository.update_table_data(&table_name, &table_data_change_events).await;
+    self.set_table_data(table_name).await;
+}
     pub async fn set_table_data(&self, table_name: String) {
         // Lock the general info table
         let tables_general_info = self.tables_general_info.lock().await;

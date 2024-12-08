@@ -1,7 +1,7 @@
 use crate::components::business_components::{
     component::{
-        BColumn, BConstraint, BDataType, BTableData, BTableGeneral, BTableIn, BTableInsertedData,
-        BusinessComponent,
+        BColumn, BConstraint, BDataType, BRowColumnValue, BTableData, BTableDataChangeEvents,
+        BTableGeneral, BTableIn, BTableInsertedData, BusinessComponent,
     },
     components::BusinessTables,
 };
@@ -37,6 +37,15 @@ impl UIComponent for TableDataUI {
 
     fn update(&mut self, message: Self::EventType) -> Task<Message> {
         match message {
+            Self::EventType::UpdateTableData => {
+                let table_data = self.table_data.clone();
+                Task::perform(
+                    async move {
+                        table_data.update_table_data().await;
+                    },
+                    |_| Self::EventType::SetTableData.message(),
+                )
+            }
             Self::EventType::GetTableData(table_name) => {
                 self.selected_table_name = Some(table_name.clone());
                 let table_data = self.table_data.clone();
@@ -58,7 +67,17 @@ impl UIComponent for TableDataUI {
                 if let Some(table_inserted_data) = self.table_inserted_data.as_mut() {
                     if let Some(row_data) = table_inserted_data.rows.get_mut(row_index) {
                         if let Some(cell) = row_data.get_mut(col_index) {
-                            *cell = new_value;
+                            *cell = new_value.clone();
+                            let column_name =
+                                self.table_inserted_data.as_ref().unwrap().column_names[col_index]
+                                    .clone();
+                            self.table_data.add_table_data_change_event(
+                                BTableDataChangeEvents::ModifyRowColumnValue(BRowColumnValue {
+                                    row_number: ((row_index as i32) + 1),
+                                    column_name,
+                                    new_value,
+                                }),
+                            );
                         }
                     }
                 }
@@ -82,15 +101,23 @@ impl TableDataUI {
 
         let table_content = self.create_table_content();
 
-        // Combine the picklist and table content into a single column
+        // Create an "Update Table" button
+        let update_button = button(
+            text("Update Table").size(16).style(|_| text_style()), // Style the button text
+        )
+        .on_press(TableDataMessage::UpdateTableData.message()) // Trigger the event
+        .padding(10)
+        .style(|_, _| update_table_data_button_style()); // Apply button styling
+
+        // Combine the picklist, table content, and update button into a single column
         Column::new()
             .spacing(20)
             .push(text("Table Data Viewer").size(32).style(|_| text_style()))
             .push(picklist)
             .push(table_content)
+            .push(update_button) // Add the button at the bottom
             .into()
     }
-
     fn create_picklist<'a>(&'a self) -> Element<'a, Message> {
         let table_names: Vec<String> = self
             .table_data
@@ -227,7 +254,26 @@ fn create_button_style() -> button::Style {
             blur_radius: 10.0,                           // Smooth shadow edges
         },
     }
-} // General text style for dark themes
+}
+
+fn update_table_data_button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.1, 0.1, 0.15))), // Dark button background
+        border: Border {
+            color: Color::from_rgb(0.0, 0.7, 1.0), // Neon cyan border
+            width: 2.0,
+            radius: Radius::from(8.0), // Rounded corners
+        },
+        text_color: Color::from_rgb(0.9, 0.9, 1.0), // Neon text
+        shadow: Shadow {
+            color: Color::from_rgba(0.0, 0.7, 1.0, 0.3), // Neon glow effect
+            offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
+            blur_radius: 10.0,                           // Smooth shadow edges
+        },
+    }
+}
+
+// General text style for dark themes
 fn text_style() -> text::Style {
     text::Style {
         color: Some(Color::from_rgb(0.9, 0.9, 1.0)), // Neon text color

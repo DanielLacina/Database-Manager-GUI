@@ -3,7 +3,8 @@ use crate::components::business_components::database::{
     database::create_database_pool,
     models::{ColumnsInfo, PrimaryKeyConstraint, TableGeneralInfo},
     schemas::{
-        ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableIn, TableInsertedData,
+        ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableDataChangeEvents, TableIn,
+        TableInsertedData,
     },
 };
 use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Transaction};
@@ -170,6 +171,51 @@ impl Repository {
         let query = format!("DROP TABLE \"{}\"", table_name);
         sqlx::query(&query).execute(&self.pool).await.unwrap();
         self.log_query(query).await;
+    }
+
+    pub async fn update_table_data(
+        &self,
+        table_name: &str,
+        table_data_change_events: &Vec<TableDataChangeEvents>,
+    ) -> Result<(), sqlx::Error> {
+        // Start a transaction
+        let mut transaction = self.pool.begin().await?;
+
+        for event in table_data_change_events {
+            if let TableDataChangeEvents::ModifyRowColumnValue(row_column_value) = event {
+                // Construct the SQL UPDATE query with dynamic row numbers
+                let query = format!(
+                    r#"
+                    WITH OrderedRows AS (
+                        SELECT
+                            ROW_NUMBER() OVER () AS row_number,
+                            *
+                        FROM "{}"
+                    )
+                    UPDATE "{}"
+                    SET "{}" = $1
+                    FROM OrderedRows
+                    WHERE "{}"."id" = OrderedRows."id" AND OrderedRows.row_number = $2
+                    "#,
+                    table_name,                   // Table for the subquery
+                    table_name,                   // Table for the update
+                    row_column_value.column_name, // Column to update
+                    table_name                    // Ensure the update applies to the correct table
+                );
+
+                // Execute the query with parameters
+                sqlx::query(&query)
+                    .bind(&row_column_value.new_value) // Bind the new value
+                    .bind(row_column_value.row_number) // Bind the row number
+                    .execute(&mut *transaction)
+                    .await?;
+                self.log_query(query).await;
+            }
+        }
+
+        // Commit the transaction
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub async fn get_table_data_rows(

@@ -161,3 +161,15 @@ pub enum TableChangeEvents {
     AddPrimaryKey(String),
     RemovePrimaryKey(String),
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RowColumnValue {
+    pub row_number: i32,
+    pub column_name: String,
+    pub new_value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TableDataChangeEvents {
+    ModifyRowColumnValue(RowColumnValue),
+}

@@ -41,10 +41,6 @@ impl TableInfo {
         self.table_change_events.blocking_lock().clone()
     }
 
-    pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
-        self.repository.insert_into_table(table_inserted_data);
-    }
-
     pub async fn set_table_info(&self, table_name: String) {
         let console = self.console.clone();
         let table_change_events = self.table_change_events.clone();
