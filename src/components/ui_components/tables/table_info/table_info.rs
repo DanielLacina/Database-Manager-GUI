@@ -10,6 +10,7 @@ use crate::components::ui_components::{
     component::{Event, UIComponent},
     events::Message,
     tables::foreign_key_dropdown::{ForeignKeyDropDownUI, ForeignKeyDropdownEvents},
+    tables::table_data::events::TableDataMessage,
     tables::table_info::events::TableInfoMessage,
 };
 use iced::{
@@ -135,6 +136,7 @@ impl UIComponent for TableInfoUI {
                     },
                     |_| Self::EventType::UpdateTableInfoUI.message(),
                 )
+                .chain(Task::done(TableDataMessage::SetTableData.message()))
             }
             Self::EventType::UpdateTableInfoUI => {
                 self.columns_display = self.table_info.columns_info.blocking_lock().clone();
