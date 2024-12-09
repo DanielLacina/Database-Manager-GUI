@@ -77,7 +77,6 @@ impl TableData {
             return; // If there's no table_inserted_data, exit the function
         }
     };
-
     // Use the extracted values without holding the locks
     self.repository.update_table_data(&table_name, &table_data_change_events).await;
     self.set_table_data(table_name).await;
@@ -118,6 +117,7 @@ impl TableData {
             };
             // Update the shared table inserted data
             *self.table_inserted_data.lock().await = Some(table_inserted_data);
+            *self.table_data_change_events.lock().await = vec![];
         }
     }
 }
@@ -128,9 +128,9 @@ mod tests {
     use crate::components::business_components::component::{
         repository_module::BRepositoryConsole, BTableGeneral, BTableIn,
     };
-    use crate::components::business_components::tables::test_utils::{
+    use crate::components::business_components::tables::{test_utils::{
         create_btable_general, create_repository_table_and_console, default_table_in, sort_columns,
-        sort_tables_general_info,
+        sort_tables_general_info}, utils::set_tables_general_info
     };
     use sqlx::PgPool;
 
@@ -141,12 +141,9 @@ mod tests {
     ) -> TableData {
         let (repository_result, console_result) =
             create_repository_table_and_console(pool, table_in).await;
-        let table_info = BTableInfo::new(
-            repository_result.clone(),
-            console_result.clone(),
-            tables_general_info,
-        );
-        let table_data = TableData::new(repository_result, console_result, Arc::new(table_info));
+        let table_general_info = Arc::new(AsyncMutex::new(Vec::<BTableGeneral>::new()));
+        set_tables_general_info(repository_result.clone(), tables_general_info.clone()).await;
+        let table_data = TableData::new(repository_result, console_result, tables_general_info);
         table_data
     }
 

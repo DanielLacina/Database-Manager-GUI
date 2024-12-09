@@ -186,35 +186,42 @@ impl Repository {
                 // Construct the SQL UPDATE query with dynamic row numbers
                 let query = format!(
                     r#"
-                    WITH OrderedRows AS (
-                        SELECT
-                            ROW_NUMBER() OVER () AS row_number,
-                            *
-                        FROM "{}"
-                    )
-                    UPDATE "{}"
-                    SET "{}" = $1
-                    FROM OrderedRows
-                    WHERE "{}"."id" = OrderedRows."id" AND OrderedRows.row_number = $2
-                    "#,
+                          WITH OrderedRows AS (
+                            SELECT
+                                ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS row_number, 
+                                ctid
+                            FROM "{}"
+                        )
+                        UPDATE "{}"
+                        SET "{}" = $1 
+                        FROM OrderedRows
+                        WHERE "{}".ctid = OrderedRows.ctid 
+                          AND OrderedRows.row_number = $2;
+                       "#,
                     table_name,                   // Table for the subquery
                     table_name,                   // Table for the update
                     row_column_value.column_name, // Column to update
                     table_name                    // Ensure the update applies to the correct table
                 );
+                let parameters = (&row_column_value.new_value, row_column_value.row_number);
 
                 // Execute the query with parameters
                 sqlx::query(&query)
-                    .bind(&row_column_value.new_value) // Bind the new value
-                    .bind(row_column_value.row_number) // Bind the row number
+                    .bind(parameters.0) // Bind the new value
+                    .bind(parameters.1) // Bind the row number
                     .execute(&mut *transaction)
-                    .await?;
-                self.log_query(query).await;
+                    .await;
+                self.log_query(
+                    query
+                        .replace("$1", parameters.0)
+                        .replace("$2", &parameters.1.to_string()),
+                )
+                .await;
             }
         }
 
         // Commit the transaction
-        transaction.commit().await?;
+        transaction.commit().await;
         Ok(())
     }
 
@@ -286,6 +293,7 @@ impl Repository {
         let mut current_table_name = table_name.to_string();
 
         let mut primary_key_columns = initial_primary_key_column_names.clone();
+        let mut run_drop_primary_constraint_query = true;
         let mut queries = Vec::new();
 
         for event in table_change_events {
@@ -316,6 +324,14 @@ impl Repository {
                     ));
                 }
                 TableChangeEvents::RemoveColumn(column_name) => {
+                    if let Some(existing_index) = primary_key_columns
+                        .iter()
+                        .position(|primary_key_column_name| primary_key_column_name == column_name)
+                    {
+                        // implicitly runs drop constraint query if primary key column is dropped
+                        run_drop_primary_constraint_query = false;
+                        primary_key_columns.remove(existing_index);
+                    }
                     queries.push(format!(
                         "ALTER TABLE \"{}\" DROP COLUMN \"{}\"",
                         current_table_name, column_name
@@ -351,14 +367,16 @@ impl Repository {
 
         // Handle primary key changes separately
         if *initial_primary_key_column_names != primary_key_columns {
-            if let Some(primary_key_constraint) =
-                self.get_primary_key_constraint(&table_name).await.unwrap()
-            {
-                let drop_query = format!(
-                    "ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\"",
-                    current_table_name, primary_key_constraint.conname
-                );
-                queries.push(drop_query);
+            if run_drop_primary_constraint_query {
+                if let Some(primary_key_constraint) =
+                    self.get_primary_key_constraint(&table_name).await.unwrap()
+                {
+                    let drop_query = format!(
+                        "ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\"",
+                        current_table_name, primary_key_constraint.conname
+                    );
+                    queries.push(drop_query);
+                }
             }
             if !primary_key_columns.is_empty() {
                 let add_query = format!(

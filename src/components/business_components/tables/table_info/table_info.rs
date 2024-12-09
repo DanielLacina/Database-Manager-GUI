@@ -285,6 +285,12 @@ impl TableInfo {
         {
             locked_table_change_events.remove(existing_event_index);
         }
+
+        if let Some(existing_event_index) = self
+            .find_existing_remove_primary_key_event_locked(&column_name, locked_table_change_events)
+        {
+            locked_table_change_events.remove(existing_event_index);
+        }
         if let Some(existing_event_index) =
             self.find_existing_add_column_event_locked(&column_name, locked_table_change_events)
         {
@@ -560,6 +566,8 @@ impl TableInfo {
         // Clear events
         locked_table_change_events.clear();
     }
+
+    pub fn find_remove_primary_key_events_count(&self) {}
     pub async fn update_table(&self) {
         self.alter_table().await;
         let current_table_name = { self.table_name.lock().await.as_ref().unwrap().clone() };
@@ -649,6 +657,7 @@ mod tests {
             BTableChangeEvents::ChangeColumnDataType(String::from("username"), BDataType::INTEGER),
             BTableChangeEvents::AddColumn(String::from("age"), BDataType::INTEGER),
             BTableChangeEvents::RemoveColumn(String::from("age")),
+            BTableChangeEvents::RemoveColumn(String::from("id")),
             BTableChangeEvents::ChangeTableName(String::from("customers")),
             BTableChangeEvents::AddColumn(String::from("created_at"), BDataType::TIMESTAMP),
             BTableChangeEvents::ChangeColumnName(
@@ -693,17 +702,12 @@ mod tests {
             for event in table_change_events {
                 table_info_copy.add_table_change_event(event);
             }
+            println!("{:?}", table_info_copy.table_change_events.blocking_lock());
         })
         .await;
-
         table_info.update_table().await;
 
         let mut expected_columns = vec![
-            BColumn {
-                name: String::from("id"),
-                datatype: BDataType::INTEGER,
-                constraints: vec![BConstraint::PrimaryKey],
-            },
             BColumn {
                 name: String::from("name"),
                 datatype: BDataType::INTEGER,
