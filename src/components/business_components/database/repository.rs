@@ -3,10 +3,11 @@ use crate::components::business_components::database::{
     database::create_database_pool,
     models::{ColumnsInfo, PrimaryKeyConstraint, TableGeneralInfo},
     schemas::{
-        ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableIn, TableInsertedData,
+        ColumnForeignKey, Constraint, DataType, TableChangeEvents, TableDataChangeEvents, TableIn,
+        TableInsertedData,
     },
 };
-use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Transaction};
+use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Row, Transaction};
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -34,6 +35,31 @@ impl Repository {
             console.write(query);
         })
         .await;
+    }
+
+    pub async fn get_primary_key_column_names(
+        &self,
+        table_name: &str,
+    ) -> Result<Vec<String>, sqlx::Error> {
+        let query = r#"
+                            SELECT kcu.column_name
+                            FROM information_schema.table_constraints AS tc
+                            JOIN information_schema.key_column_usage AS kcu
+                            ON tc.constraint_name = kcu.constraint_name
+                            AND tc.table_name = kcu.table_name
+                            WHERE tc.constraint_type = 'PRIMARY KEY'
+                            AND tc.table_name = $1
+                         "#;
+
+        let primary_key_column_names: Vec<String> = sqlx::query(query)
+            .bind(table_name)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|row| row.get("column_name"))
+            .collect();
+        self.log_query(query.replace("$1", table_name));
+        Ok(primary_key_column_names)
     }
 
     pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, sqlx::Error> {
@@ -172,10 +198,62 @@ impl Repository {
         self.log_query(query).await;
     }
 
+    pub async fn update_table_data(
+        &self,
+        table_name: &str,
+        table_data_change_events: &Vec<TableDataChangeEvents>,
+    ) -> Result<(), sqlx::Error> {
+        // Start a transaction
+        let mut transaction = self.pool.begin().await?;
+
+        for event in table_data_change_events {
+            if let TableDataChangeEvents::ModifyRowColumnValue(row_column_value) = event {
+                let filter_condition = row_column_value
+                    .conditions
+                    .iter()
+                    .map(|condition| format!("{} = {}", condition.column_name, condition.value))
+                    .collect::<Vec<String>>()
+                    .join(" AND ");
+                // Construct the SQL UPDATE query with dynamic row numbers
+                let bind_parameter = if row_column_value.data_type == DataType::INTEGER {
+                    "$1::INTEGER"
+                } else {
+                    "$1"
+                };
+                let query = format!(
+                    "
+                        UPDATE \"{}\"
+                        SET \"{}\" = {} 
+                        WHERE {}
+                       ",
+                    table_name,                   // Table for the update
+                    row_column_value.column_name, // Column to update
+                    bind_parameter,
+                    filter_condition
+                );
+                let parameters = (&row_column_value.new_value,);
+
+                // Execute the query with parameters
+                println!("{}", query);
+                sqlx::query(&query)
+                    .bind(parameters.0) // Bind the new value
+                    .execute(&mut *transaction)
+                    .await
+                    .unwrap();
+                self.log_query(query.replace("$1", parameters.0)).await;
+            }
+        }
+
+        // Commit the transaction
+        transaction.commit().await.unwrap();
+        Ok(())
+    }
+
     pub async fn get_table_data_rows(
         &self,
         table_name: &str,
         column_names: &Vec<String>,
+        order_by_column_names: &Vec<String>,
     ) -> Result<Vec<PgRow>, sqlx::Error> {
         let select_column_names: Vec<String> = column_names
             .into_iter()
@@ -186,10 +264,15 @@ impl Repository {
                 )
             })
             .collect();
+        let order_by_columns: Vec<String> = order_by_column_names
+            .iter()
+            .map(|column_name| format!("\"{}\"", column_name))
+            .collect();
         let query = format!(
-            "SELECT {} FROM \"{}\"",
+            "SELECT {} FROM \"{}\" ORDER BY {}",
             select_column_names.join(", "),
-            table_name
+            table_name,
+            order_by_columns.join(", ")
         );
         let table_data_rows = sqlx::query(&query).fetch_all(&self.pool).await;
         table_data_rows
@@ -240,6 +323,7 @@ impl Repository {
         let mut current_table_name = table_name.to_string();
 
         let mut primary_key_columns = initial_primary_key_column_names.clone();
+        let mut run_drop_primary_constraint_query = true;
         let mut queries = Vec::new();
 
         for event in table_change_events {
@@ -270,6 +354,14 @@ impl Repository {
                     ));
                 }
                 TableChangeEvents::RemoveColumn(column_name) => {
+                    if let Some(existing_index) = primary_key_columns
+                        .iter()
+                        .position(|primary_key_column_name| primary_key_column_name == column_name)
+                    {
+                        // implicitly runs drop constraint query if primary key column is dropped
+                        run_drop_primary_constraint_query = false;
+                        primary_key_columns.remove(existing_index);
+                    }
                     queries.push(format!(
                         "ALTER TABLE \"{}\" DROP COLUMN \"{}\"",
                         current_table_name, column_name
@@ -305,14 +397,16 @@ impl Repository {
 
         // Handle primary key changes separately
         if *initial_primary_key_column_names != primary_key_columns {
-            if let Some(primary_key_constraint) =
-                self.get_primary_key_constraint(&table_name).await.unwrap()
-            {
-                let drop_query = format!(
-                    "ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\"",
-                    current_table_name, primary_key_constraint.conname
-                );
-                queries.push(drop_query);
+            if run_drop_primary_constraint_query {
+                if let Some(primary_key_constraint) =
+                    self.get_primary_key_constraint(&table_name).await.unwrap()
+                {
+                    let drop_query = format!(
+                        "ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\"",
+                        current_table_name, primary_key_constraint.conname
+                    );
+                    queries.push(drop_query);
+                }
             }
             if !primary_key_columns.is_empty() {
                 let add_query = format!(

@@ -1,12 +1,14 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BConstraint, BDataType,
-    BTableChangeEvents, BTableGeneral, BTableIn, BTableInfo, BTableInsertedData, BusinessComponent,
+    BRowColumnValue, BTableChangeEvents, BTableDataChangeEvents, BTableGeneral, BTableIn,
+    BTableInfo, BTableInsertedData, BusinessComponent, BCondition 
 };
 use crate::components::business_components::components::BusinessConsole;
 use sqlx::Row;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
+use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct TableData {
@@ -14,8 +16,9 @@ pub struct TableData {
     console: Arc<BusinessConsole>,
     pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     pub table_inserted_data: Arc<AsyncMutex<Option<BTableInsertedData>>>,
+    pub table_data_change_events: Arc<AsyncMutex<Vec<BTableDataChangeEvents>>>,
+    primary_key_column_names: Arc<AsyncMutex<Vec<String>>> 
 }
-
 impl TableData {
     pub fn new(
         repository: Arc<BRepository>,
@@ -27,30 +30,108 @@ impl TableData {
             console,
             tables_general_info,
             table_inserted_data: Arc::new(AsyncMutex::new(None)),
+            table_data_change_events: Arc::new(AsyncMutex::new(vec![])),
+            primary_key_column_names: Arc::new(AsyncMutex::new(vec![]))
         }
+    }
+
+    pub fn convert_to_modify_row_column_value_event(
+    &self,
+    row_index: usize,
+    column_name: String,
+    new_value: String,
+) -> BTableDataChangeEvents {
+    // Acquire locks for necessary data
+    let table_data = self.table_inserted_data.blocking_lock();
+    let primary_key_columns = self.primary_key_column_names.blocking_lock();
+
+    // Safely unwrap the locked data
+    let table_data = table_data.as_ref().unwrap();
+
+    // Extract conditions based on primary key column names
+    let conditions: Vec<BCondition> = table_data
+        .column_names
+        .iter()
+        .zip(&table_data.data_types)
+        .zip(&table_data.rows[row_index])
+        .filter(|((column_name, _), _)| primary_key_columns.contains(column_name))
+        .map(|((column_name, data_type), value)| BCondition {
+            column_name: column_name.clone(),
+            data_type: data_type.clone(),
+            value: value.clone(),
+        })
+        .collect();
+    let column_datatype_index = table_data.column_names.iter().position(|col_name| *col_name == column_name).as_ref().unwrap().clone();
+    let data_type = table_data.data_types[column_datatype_index].clone();
+    // Create and return the event
+    BTableDataChangeEvents::ModifyRowColumnValue(BRowColumnValue {
+        conditions,
+        column_name,
+        new_value,
+        data_type
+    })
+}
+    pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEvents) {
+        let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
+        match &table_data_change_event {
+            BTableDataChangeEvents::ModifyRowColumnValue(row_column_value) => {
+                if let Some(existing_event_index) = locked_table_data_change_events.iter().position(
+                    |existing_event| matches!(existing_event, 
+                        BTableDataChangeEvents::ModifyRowColumnValue(existing_row_column_value)
+                        if zip(&row_column_value.conditions, &existing_row_column_value.conditions).all(|(condition, existing_condition)| condition.value == existing_condition.value) )
+                    
+                ) {
+                    // Replace the existing event
+                    locked_table_data_change_events.remove(existing_event_index);
+                    locked_table_data_change_events.push(table_data_change_event);
+
+                } else {
+                            
+                    locked_table_data_change_events.push(table_data_change_event);
+                        }
+            }
+        }
+        self.console.write(format!("{:?}", locked_table_data_change_events));
+
+    // Add the new event if no matching event was found
     }
 
     pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
         self.repository.insert_into_table(table_inserted_data).await;
     }
 
+    pub async fn update_table_data(&self) {
+    // Extract and drop the lock on `table_inserted_data`
+    let (table_name, table_data_change_events) = {
+        let table_inserted_data_guard = self.table_inserted_data.lock().await;
+        if let Some(ref table_inserted_data) = *table_inserted_data_guard {
+            let table_name = table_inserted_data.table_name.clone();
+            let table_data_change_events_guard = self.table_data_change_events.lock().await;
+            let table_data_change_events = table_data_change_events_guard.clone();
+            (table_name, table_data_change_events)
+        } else {
+            return; // If there's no table_inserted_data, exit the function
+        }
+    };
+    // Use the extracted values without holding the locks
+    self.repository.update_table_data(&table_name, &table_data_change_events).await;
+    self.set_table_data(table_name).await;
+}
     pub async fn set_table_data(&self, table_name: String) {
         // Lock the general info table
         let tables_general_info = self.tables_general_info.lock().await;
-
-        // Find the general info for the specified table
         if let Some(table_general_info) = tables_general_info
             .iter()
             .find(|info| info.table_name == table_name)
         {
+        let primary_key_column_names = self.repository.get_primary_key_column_names(&table_name).await.unwrap();
             // Fetch rows for the table
             let table_data_rows = self
                 .repository
-                .get_table_data_rows(&table_name, &table_general_info.column_names)
+                .get_table_data_rows(&table_name, &table_general_info.column_names, &primary_key_column_names)
                 .await
                 .unwrap();
-
-            // Construct the inserted data
+                        // Construct the inserted data
             let table_inserted_data = BTableInsertedData {
                 table_name: table_name.clone(),
                 column_names: table_general_info.column_names.clone(),
@@ -62,7 +143,7 @@ impl TableData {
                             .column_names
                             .iter()
                             .map(|column_name| {
-                                row.try_get::<String, _>(column_name.as_str()).unwrap()
+                                row.get::<String, _>(column_name.as_str())
                             })
                             .collect::<Vec<String>>()
                     })
@@ -70,6 +151,8 @@ impl TableData {
             };
             // Update the shared table inserted data
             *self.table_inserted_data.lock().await = Some(table_inserted_data);
+            *self.table_data_change_events.lock().await = vec![];
+            *self.primary_key_column_names.lock().await = primary_key_column_names;
         }
     }
 }
@@ -80,9 +163,9 @@ mod tests {
     use crate::components::business_components::component::{
         repository_module::BRepositoryConsole, BTableGeneral, BTableIn,
     };
-    use crate::components::business_components::tables::test_utils::{
+    use crate::components::business_components::tables::{test_utils::{
         create_btable_general, create_repository_table_and_console, default_table_in, sort_columns,
-        sort_tables_general_info,
+        sort_tables_general_info}, utils::set_tables_general_info
     };
     use sqlx::PgPool;
 
@@ -93,12 +176,9 @@ mod tests {
     ) -> TableData {
         let (repository_result, console_result) =
             create_repository_table_and_console(pool, table_in).await;
-        let table_info = BTableInfo::new(
-            repository_result.clone(),
-            console_result.clone(),
-            tables_general_info,
-        );
-        let table_data = TableData::new(repository_result, console_result, Arc::new(table_info));
+        let table_general_info = Arc::new(AsyncMutex::new(Vec::<BTableGeneral>::new()));
+        set_tables_general_info(repository_result.clone(), tables_general_info.clone()).await;
+        let table_data = TableData::new(repository_result, console_result, tables_general_info);
         table_data
     }
 

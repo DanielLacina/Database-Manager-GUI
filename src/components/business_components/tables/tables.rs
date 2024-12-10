@@ -46,7 +46,23 @@ impl Tables {
         }
     }
 
-    pub async fn add_table(&self, table_in: BTableIn) {
+    pub async fn add_table(&self, mut table_in: BTableIn) {
+        // Check if no column has a primary key constraint
+        if !table_in.columns.iter().any(|column| {
+            column
+                .constraints
+                .iter()
+                .any(|constraint| matches!(constraint, BConstraint::PrimaryKey))
+        }) {
+            // Add a default primary key column if none exists
+            table_in.columns.push(BColumn {
+                name: "id".to_string(),
+                datatype: BDataType::INTEGER,
+                constraints: vec![BConstraint::PrimaryKey],
+            });
+        }
+
+        // Create the table and update general info
         self.repository.create_table(&table_in).await;
         set_tables_general_info(self.repository.clone(), self.tables_general_info.clone()).await;
     }
@@ -112,9 +128,15 @@ mod tests {
         tables.add_table(new_table_in.clone()).await;
 
         // Prepare expected results
+        let mut new_table = new_table_in;
+        new_table.columns.push(BColumn {
+            name: String::from("id"),
+            datatype: BDataType::INTEGER,
+            constraints: vec![BConstraint::PrimaryKey],
+        });
         let mut expected_tables_general_info = vec![
             create_btable_general(&initial_table_in),
-            create_btable_general(&new_table_in),
+            create_btable_general(&new_table),
         ];
 
         let mut tables_general_info = tables.tables_general_info.lock().await.clone();
