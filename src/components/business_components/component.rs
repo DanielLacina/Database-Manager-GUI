@@ -1,6 +1,6 @@
 use crate::components::business_components::database::models::ColumnsInfo;
 use crate::components::business_components::database::schemas::{
-    Column, ColumnForeignKey, Constraint, DataType, RowColumnValue, TableChangeEvents,
+    Column, ColumnForeignKey, Condition, Constraint, DataType, RowColumnValue, TableChangeEvents,
     TableDataChangeEvents, TableGeneral, TableIn, TableInsertedData,
 };
 use crate::components::business_components::tables::{
@@ -17,6 +17,7 @@ pub type BTableData = TableData;
 pub type BTableGeneral = TableGeneral;
 pub type BConstraint = Constraint;
 pub type BColumnForeignKey = ColumnForeignKey;
+pub type BCondition = Condition;
 pub type BTableInsertedData = TableInsertedData;
 pub type BRowColumnValue = RowColumnValue;
 

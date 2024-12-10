@@ -71,13 +71,14 @@ impl UIComponent for TableDataUI {
                             let column_name =
                                 self.table_inserted_data.as_ref().unwrap().column_names[col_index]
                                     .clone();
-                            self.table_data.add_table_data_change_event(
-                                BTableDataChangeEvents::ModifyRowColumnValue(BRowColumnValue {
-                                    row_number: ((row_index as i32) + 1),
+                            let modify_column_event =
+                                self.table_data.convert_to_modify_row_column_value_event(
+                                    row_index,
                                     column_name,
                                     new_value,
-                                }),
-                            );
+                                );
+                            self.table_data
+                                .add_table_data_change_event(modify_column_event);
                         }
                     }
                 }

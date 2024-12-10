@@ -211,39 +211,41 @@ impl Repository {
                 let filter_condition = row_column_value
                     .conditions
                     .iter()
-                    .map(|condition| {
-                        if condition.data_type == DataType::TEXT {
-                            format!("{} == \"{}\"", condition.column_name, condition.value)
-                        } else {
-                            format!("{} == {}", condition.column_name, condition.value)
-                        }
-                    })
+                    .map(|condition| format!("{} = {}", condition.column_name, condition.value))
                     .collect::<Vec<String>>()
                     .join(" AND ");
                 // Construct the SQL UPDATE query with dynamic row numbers
+                let bind_parameter = if row_column_value.data_type == DataType::INTEGER {
+                    "$1::INTEGER"
+                } else {
+                    "$1"
+                };
                 let query = format!(
-                    r#"
-                        UPDATE "{}"
-                        SET "{}" = $1 
+                    "
+                        UPDATE \"{}\"
+                        SET \"{}\" = {} 
                         WHERE {}
-                       "#,
+                       ",
                     table_name,                   // Table for the update
                     row_column_value.column_name, // Column to update
+                    bind_parameter,
                     filter_condition
                 );
                 let parameters = (&row_column_value.new_value,);
 
                 // Execute the query with parameters
+                println!("{}", query);
                 sqlx::query(&query)
                     .bind(parameters.0) // Bind the new value
                     .execute(&mut *transaction)
-                    .await;
+                    .await
+                    .unwrap();
                 self.log_query(query.replace("$1", parameters.0)).await;
             }
         }
 
         // Commit the transaction
-        transaction.commit().await;
+        transaction.commit().await.unwrap();
         Ok(())
     }
 
@@ -251,6 +253,7 @@ impl Repository {
         &self,
         table_name: &str,
         column_names: &Vec<String>,
+        order_by_column_names: &Vec<String>,
     ) -> Result<Vec<PgRow>, sqlx::Error> {
         let select_column_names: Vec<String> = column_names
             .into_iter()
@@ -261,10 +264,15 @@ impl Repository {
                 )
             })
             .collect();
+        let order_by_columns: Vec<String> = order_by_column_names
+            .iter()
+            .map(|column_name| format!("\"{}\"", column_name))
+            .collect();
         let query = format!(
-            "SELECT {} FROM \"{}\"",
+            "SELECT {} FROM \"{}\" ORDER BY {}",
             select_column_names.join(", "),
-            table_name
+            table_name,
+            order_by_columns.join(", ")
         );
         let table_data_rows = sqlx::query(&query).fetch_all(&self.pool).await;
         table_data_rows

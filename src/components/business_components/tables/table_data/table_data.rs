@@ -1,7 +1,7 @@
 use crate::components::business_components::component::{
     repository_module::BRepository, BColumn, BColumnForeignKey, BConstraint, BDataType,
     BRowColumnValue, BTableChangeEvents, BTableDataChangeEvents, BTableGeneral, BTableIn,
-    BTableInfo, BTableInsertedData, BusinessComponent,
+    BTableInfo, BTableInsertedData, BusinessComponent, BCondition 
 };
 use crate::components::business_components::components::BusinessConsole;
 use sqlx::Row;
@@ -19,12 +19,6 @@ pub struct TableData {
     pub table_data_change_events: Arc<AsyncMutex<Vec<BTableDataChangeEvents>>>,
     primary_key_column_names: Arc<AsyncMutex<Vec<String>>> 
 }
-
-pub struct TableDataChangeEventsByRowIndex {
-   pub row_index: usize,  
-   pub new_value: String
-}
-
 impl TableData {
     pub fn new(
         repository: Arc<BRepository>,
@@ -37,13 +31,48 @@ impl TableData {
             tables_general_info,
             table_inserted_data: Arc::new(AsyncMutex::new(None)),
             table_data_change_events: Arc::new(AsyncMutex::new(vec![])),
+            primary_key_column_names: Arc::new(AsyncMutex::new(vec![]))
         }
     }
 
+    pub fn convert_to_modify_row_column_value_event(
+    &self,
+    row_index: usize,
+    column_name: String,
+    new_value: String,
+) -> BTableDataChangeEvents {
+    // Acquire locks for necessary data
+    let table_data = self.table_inserted_data.blocking_lock();
+    let primary_key_columns = self.primary_key_column_names.blocking_lock();
 
-    pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEventsByRowNumber) {
+    // Safely unwrap the locked data
+    let table_data = table_data.as_ref().unwrap();
+
+    // Extract conditions based on primary key column names
+    let conditions: Vec<BCondition> = table_data
+        .column_names
+        .iter()
+        .zip(&table_data.data_types)
+        .zip(&table_data.rows[row_index])
+        .filter(|((column_name, _), _)| primary_key_columns.contains(column_name))
+        .map(|((column_name, data_type), value)| BCondition {
+            column_name: column_name.clone(),
+            data_type: data_type.clone(),
+            value: value.clone(),
+        })
+        .collect();
+    let column_datatype_index = table_data.column_names.iter().position(|col_name| *col_name == column_name).as_ref().unwrap().clone();
+    let data_type = table_data.data_types[column_datatype_index].clone();
+    // Create and return the event
+    BTableDataChangeEvents::ModifyRowColumnValue(BRowColumnValue {
+        conditions,
+        column_name,
+        new_value,
+        data_type
+    })
+}
+    pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEvents) {
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
-
         match &table_data_change_event {
             BTableDataChangeEvents::ModifyRowColumnValue(row_column_value) => {
                 if let Some(existing_event_index) = locked_table_data_change_events.iter().position(
@@ -65,13 +94,6 @@ impl TableData {
         self.console.write(format!("{:?}", locked_table_data_change_events));
 
     // Add the new event if no matching event was found
-    }
-
-    async fn get_primary_key_columns_and_values_by_row_index(&self, row_index: usize) {
-        let locked_table_inserted_data = self.table_inserted_data.blocking_lock();
-        if let Some(row) = locked_table_inserted_data.get(row_index) {
-            tables_general_info
-        }
     }
 
     pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
@@ -102,15 +124,14 @@ impl TableData {
             .iter()
             .find(|info| info.table_name == table_name)
         {
+        let primary_key_column_names = self.repository.get_primary_key_column_names(&table_name).await.unwrap();
             // Fetch rows for the table
             let table_data_rows = self
                 .repository
-                .get_table_data_rows(&table_name, &table_general_info.column_names)
+                .get_table_data_rows(&table_name, &table_general_info.column_names, &primary_key_column_names)
                 .await
                 .unwrap();
-            let primary_key_column_names = self.repository.get_primary_key_column_names(&table_name).await.unwrap();
-
-            // Construct the inserted data
+                        // Construct the inserted data
             let table_inserted_data = BTableInsertedData {
                 table_name: table_name.clone(),
                 column_names: table_general_info.column_names.clone(),
