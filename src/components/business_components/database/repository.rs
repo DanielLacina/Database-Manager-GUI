@@ -265,7 +265,7 @@ impl Repository {
                             if data_type == BDataType::TEXT {
                                 format!("'{}'", value)
                             } else {
-                                value
+                                value.to_string()
                             }
                         })
                         .collect();
