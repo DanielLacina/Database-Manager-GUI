@@ -11,6 +11,7 @@ pub enum TableDataMessage {
     GetTableData(String),
     SetTableData,
     UpdateCell(usize, usize, String),
+    DeleteRow(usize),
     UpdateTableData,
 }
 

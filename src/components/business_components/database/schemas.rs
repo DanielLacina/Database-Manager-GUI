@@ -180,4 +180,5 @@ pub struct RowColumnValue {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TableDataChangeEvents {
     ModifyRowColumnValue(RowColumnValue),
+    DeleteRow(Vec<Condition>),
 }

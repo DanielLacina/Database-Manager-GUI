@@ -84,6 +84,15 @@ impl UIComponent for TableDataUI {
                 }
                 Task::none()
             }
+            Self::EventType::DeleteRow(row_index) => {
+                if let Some(table_inserted_data) = self.table_inserted_data.as_mut() {
+                    table_inserted_data.rows.remove(row_index);
+                    let delete_row_event = self.table_data.convert_to_delete_row_event(row_index);
+                    self.table_data
+                        .add_table_data_change_event(delete_row_event);
+                }
+                Task::none()
+            }
         }
     }
 }
@@ -106,7 +115,7 @@ impl TableDataUI {
         let update_button = button(
             text("Update Table").size(16).style(|_| text_style()), // Style the button text
         )
-        .on_press(TableDataMessage::UpdateTableData.message()) // Trigger the event
+        .on_press(<TableDataUI as UIComponent>::EventType::UpdateTableData.message()) // Trigger the event
         .padding(10)
         .style(|_, _| update_table_data_button_style()); // Apply button styling
 
@@ -175,15 +184,25 @@ impl TableDataUI {
     }
 
     fn create_table_row<'a>(&'a self, row: &[String], row_index: usize) -> Row<'a, Message> {
-        row.iter()
-            .enumerate()
-            .fold(Row::new().spacing(10), |r, (col_index, value)| {
-                r.push(
-                    container(self.create_table_column(row_index, col_index, value.as_str()))
-                        .width(Length::FillPortion(1)), // Match width with header columns
-                )
-            })
+        let mut table_row = Row::new().spacing(10);
+        for (col_index, value) in row.iter().enumerate() {
+            table_row = table_row.push(
+                container(self.create_table_column(row_index, col_index, value.as_str()))
+                    .width(Length::FillPortion(1)), // Match width with header columns
+            );
+        }
+        table_row.push(self.delete_row_button(row_index))
     }
+
+    fn delete_row_button<'a>(&'a self, row_index: usize) -> Button<'a, Message> {
+        button(
+            text("Delete Row").size(16).style(|_| text_style()), // Style the button text
+        )
+        .on_press(<TableDataUI as UIComponent>::EventType::DeleteRow(row_index).message()) // Trigger the event
+        .padding(10)
+        .style(|_, _| delete_table_row_button_style()) // App
+    }
+
     fn create_table_column<'a>(
         &'a self,
         row_index: usize,
@@ -268,6 +287,23 @@ fn update_table_data_button_style() -> button::Style {
         text_color: Color::from_rgb(0.9, 0.9, 1.0), // Neon text
         shadow: Shadow {
             color: Color::from_rgba(0.0, 0.7, 1.0, 0.3), // Neon glow effect
+            offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
+            blur_radius: 10.0,                           // Smooth shadow edges
+        },
+    }
+}
+
+fn delete_table_row_button_style() -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.2, 0.0, 0.0))), // Dark red background
+        border: Border {
+            color: Color::from_rgb(1.0, 0.2, 0.2), // Bright red border
+            width: 2.0,
+            radius: Radius::from(8.0), // Rounded corners
+        },
+        text_color: Color::from_rgb(1.0, 0.9, 0.9), // Slightly off-white text for contrast
+        shadow: Shadow {
+            color: Color::from_rgba(1.0, 0.2, 0.2, 0.3), // Subtle red glow
             offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
             blur_radius: 10.0,                           // Smooth shadow edges
         },

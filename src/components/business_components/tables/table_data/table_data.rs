@@ -35,21 +35,9 @@ impl TableData {
         }
     }
 
-    pub fn convert_to_modify_row_column_value_event(
-    &self,
-    row_index: usize,
-    column_name: String,
-    new_value: String,
-) -> BTableDataChangeEvents {
-    // Acquire locks for necessary data
-    let table_data = self.table_inserted_data.blocking_lock();
-    let primary_key_columns = self.primary_key_column_names.blocking_lock();
-
-    // Safely unwrap the locked data
-    let table_data = table_data.as_ref().unwrap();
-
-    // Extract conditions based on primary key column names
-    let conditions: Vec<BCondition> = table_data
+    fn get_primary_key_conditions(&self, row_index: usize, table_data: &BTableInsertedData) -> Vec<BCondition> {
+        let primary_key_columns = self.primary_key_column_names.blocking_lock();
+        table_data
         .column_names
         .iter()
         .zip(&table_data.data_types)
@@ -60,7 +48,23 @@ impl TableData {
             data_type: data_type.clone(),
             value: value.clone(),
         })
-        .collect();
+        .collect()
+    }
+
+    pub fn convert_to_modify_row_column_value_event(
+    &self,
+    row_index: usize,
+    column_name: String,
+    new_value: String,
+) -> BTableDataChangeEvents {
+    // Acquire locks for necessary data
+    let table_data = self.table_inserted_data.blocking_lock();
+
+    // Safely unwrap the locked data
+    let table_data = table_data.as_ref().unwrap();
+
+    // Extract conditions based on primary key column names
+    let conditions = self.get_primary_key_conditions(row_index, &table_data); 
     let column_datatype_index = table_data.column_names.iter().position(|col_name| *col_name == column_name).as_ref().unwrap().clone();
     let data_type = table_data.data_types[column_datatype_index].clone();
     // Create and return the event
@@ -71,6 +75,18 @@ impl TableData {
         data_type
     })
 }
+
+   pub fn convert_to_delete_row_event(&self, row_index: usize) -> BTableDataChangeEvents {
+    let table_data = self.table_inserted_data.blocking_lock();
+
+    // Safely unwrap the locked data
+    let table_data = table_data.as_ref().unwrap();
+
+    // Extract conditions based on primary key column names
+    let conditions = self.get_primary_key_conditions(row_index, &table_data); 
+    BTableDataChangeEvents::DeleteRow(conditions) 
+   }
+
     pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEvents) {
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
         match &table_data_change_event {
@@ -90,6 +106,9 @@ impl TableData {
                     locked_table_data_change_events.push(table_data_change_event);
                         }
             }
+            _ => {
+                 locked_table_data_change_events.push(table_data_change_event);
+            } 
         }
         self.console.write(format!("{:?}", locked_table_data_change_events));
 
