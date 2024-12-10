@@ -8,6 +8,7 @@ use sqlx::Row;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
+use std::iter::zip;
 
 #[derive(Debug, Clone)]
 pub struct TableData {
@@ -16,6 +17,12 @@ pub struct TableData {
     pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     pub table_inserted_data: Arc<AsyncMutex<Option<BTableInsertedData>>>,
     pub table_data_change_events: Arc<AsyncMutex<Vec<BTableDataChangeEvents>>>,
+    primary_key_column_names: Arc<AsyncMutex<Vec<String>>> 
+}
+
+pub struct TableDataChangeEventsByRowIndex {
+   pub row_index: usize,  
+   pub new_value: String
 }
 
 impl TableData {
@@ -33,7 +40,8 @@ impl TableData {
         }
     }
 
-    pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEvents) {
+
+    pub fn add_table_data_change_event(&self, table_data_change_event: BTableDataChangeEventsByRowNumber) {
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
 
         match &table_data_change_event {
@@ -41,9 +49,8 @@ impl TableData {
                 if let Some(existing_event_index) = locked_table_data_change_events.iter().position(
                     |existing_event| matches!(existing_event, 
                         BTableDataChangeEvents::ModifyRowColumnValue(existing_row_column_value)
-                        if existing_row_column_value.row_number == row_column_value.row_number
-                            && existing_row_column_value.column_name == row_column_value.column_name
-                    ),
+                        if zip(&row_column_value.conditions, &existing_row_column_value.conditions).all(|(condition, existing_condition)| condition.value == existing_condition.value) )
+                    
                 ) {
                     // Replace the existing event
                     locked_table_data_change_events.remove(existing_event_index);
@@ -58,6 +65,13 @@ impl TableData {
         self.console.write(format!("{:?}", locked_table_data_change_events));
 
     // Add the new event if no matching event was found
+    }
+
+    async fn get_primary_key_columns_and_values_by_row_index(&self, row_index: usize) {
+        let locked_table_inserted_data = self.table_inserted_data.blocking_lock();
+        if let Some(row) = locked_table_inserted_data.get(row_index) {
+            tables_general_info
+        }
     }
 
     pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
@@ -84,8 +98,6 @@ impl TableData {
     pub async fn set_table_data(&self, table_name: String) {
         // Lock the general info table
         let tables_general_info = self.tables_general_info.lock().await;
-
-        // Find the general info for the specified table
         if let Some(table_general_info) = tables_general_info
             .iter()
             .find(|info| info.table_name == table_name)
@@ -96,6 +108,7 @@ impl TableData {
                 .get_table_data_rows(&table_name, &table_general_info.column_names)
                 .await
                 .unwrap();
+            let primary_key_column_names = self.repository.get_primary_key_column_names(&table_name).await.unwrap();
 
             // Construct the inserted data
             let table_inserted_data = BTableInsertedData {
@@ -109,7 +122,7 @@ impl TableData {
                             .column_names
                             .iter()
                             .map(|column_name| {
-                                row.try_get::<String, _>(column_name.as_str()).unwrap()
+                                row.get::<String, _>(column_name.as_str())
                             })
                             .collect::<Vec<String>>()
                     })
@@ -118,6 +131,7 @@ impl TableData {
             // Update the shared table inserted data
             *self.table_inserted_data.lock().await = Some(table_inserted_data);
             *self.table_data_change_events.lock().await = vec![];
+            *self.primary_key_column_names.lock().await = primary_key_column_names;
         }
     }
 }

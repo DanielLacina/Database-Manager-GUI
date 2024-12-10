@@ -527,24 +527,43 @@ impl TableInfo {
             .position(|event| matches!(event, BTableChangeEvents::ChangeTableName(_)))
     }
 
+    fn primary_key_column_names(&self) -> Vec<String> {
+        let locked_columns = self.columns_info.blocking_lock();
+        locked_columns
+            .iter()
+            .filter(|&column| {
+                column
+                    .constraints
+                    .iter()
+                    .any(|constraint| matches!(constraint, BConstraint::PrimaryKey))
+            })
+            .map(|column| column.name.clone())
+            .collect()
+    }
+
+    fn add_primary_key_events_count(&self) -> usize {
+        let locked_table_change_events = self.table_change_events.blocking_lock();
+        locked_table_change_events
+            .iter()
+            .filter(|table_change_event| {
+                matches!(
+                    table_change_event,
+                    BTableChangeEvents::AddPrimaryKey(column_name)
+                )
+            })
+            .count()
+    }
+
     async fn alter_table(&self) {
         let mut locked_table_change_events = self.table_change_events.lock().await;
         let mut locked_table_name = self.table_name.lock().await;
 
         if !locked_table_change_events.is_empty() {
-            let primary_key_column_names: Vec<String> = {
-                let locked_columns = self.columns_info.lock().await;
-                locked_columns
-                    .iter()
-                    .filter(|&column| {
-                        column
-                            .constraints
-                            .iter()
-                            .any(|constraint| matches!(constraint, BConstraint::PrimaryKey))
-                    })
-                    .map(|column| column.name.clone())
-                    .collect()
-            };
+            let table_info = self.clone();
+            let primary_key_column_names =
+                task::spawn_blocking(move || table_info.primary_key_column_names())
+                    .await
+                    .unwrap();
 
             let res = self
                 .repository
@@ -567,8 +586,42 @@ impl TableInfo {
         locked_table_change_events.clear();
     }
 
-    pub fn find_remove_primary_key_events_count(&self) {}
+    pub fn at_least_one_primary_key(&self) -> bool {
+        let mut remove_primary_key_count = 0;
+        let primary_key_column_names = self.primary_key_column_names();
+        let add_primary_key_events_count = self.add_primary_key_events_count();
+        let locked_table_change_events = self.table_change_events.blocking_lock();
+        for table_change_event in locked_table_change_events.iter() {
+            // there arent suppose to be a collision of the same column having a remove column
+            // and remove primary key event according to the business logic
+            if let BTableChangeEvents::RemoveColumn(column_name) = table_change_event {
+                if primary_key_column_names
+                    .iter()
+                    .any(|primary_key_column_name| primary_key_column_name == column_name)
+                {
+                    remove_primary_key_count += 1;
+                }
+            } else if let BTableChangeEvents::RemovePrimaryKey(column_name) = table_change_event {
+                remove_primary_key_count += 1;
+            }
+        }
+        (primary_key_column_names.len() + add_primary_key_events_count) > remove_primary_key_count
+    }
+
     pub async fn update_table(&self) {
+        let table_info = self.clone();
+        task::spawn_blocking(move || {
+            let at_least_one_primary_key = table_info.at_least_one_primary_key();
+            if !at_least_one_primary_key {
+                let column_name = String::from("id");
+                table_info.add_table_change_event(BTableChangeEvents::AddColumn(
+                    column_name.clone(),
+                    BDataType::INTEGER,
+                ));
+                table_info.add_table_change_event(BTableChangeEvents::AddPrimaryKey(column_name));
+            }
+        })
+        .await;
         self.alter_table().await;
         let current_table_name = { self.table_name.lock().await.as_ref().unwrap().clone() };
 
@@ -755,5 +808,35 @@ mod tests {
 
         let table_change_events = table_info.table_change_events.lock().await;
         assert!(table_change_events.is_empty());
+    }
+
+    #[sqlx::test]
+    async fn test_alter_table_that_removes_all_primary_keys(pool: PgPool) {
+        let tables_general_info = Arc::new(AsyncMutex::new(Vec::new()));
+
+        let table_in = default_table_in();
+        let table_info = create_table_info(pool, &table_in, tables_general_info).await;
+
+        // removing a primary key id
+        let table_change_events = vec![BTableChangeEvents::RemoveColumn(String::from("id"))];
+
+        let table_info_copy = table_info.clone();
+        task::spawn_blocking(move || {
+            for event in table_change_events {
+                table_info_copy.add_table_change_event(event);
+            }
+            println!("{:?}", table_info_copy.table_change_events.blocking_lock());
+        })
+        .await;
+        table_info.update_table().await;
+        let columns_info = table_info.columns_info.lock().await;
+        let expected_primary_key_column = BColumn {
+            name: String::from("id"),
+            datatype: BDataType::INTEGER,
+            constraints: vec![BConstraint::PrimaryKey],
+        };
+        assert!(columns_info
+            .iter()
+            .any(|column| *column == expected_primary_key_column));
     }
 }

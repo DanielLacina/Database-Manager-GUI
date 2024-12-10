@@ -163,8 +163,15 @@ pub enum TableChangeEvents {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Condition {
+    pub column_name: String,
+    pub data_type: DataType,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct RowColumnValue {
-    pub row_number: i32,
+    pub conditions: Vec<Condition>,
     pub column_name: String,
     pub new_value: String,
 }

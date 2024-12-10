@@ -7,7 +7,7 @@ use crate::components::business_components::database::{
         TableInsertedData,
     },
 };
-use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Transaction};
+use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Row, Transaction};
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -35,6 +35,31 @@ impl Repository {
             console.write(query);
         })
         .await;
+    }
+
+    pub async fn get_primary_key_column_names(
+        &self,
+        table_name: &str,
+    ) -> Result<Vec<String>, sqlx::Error> {
+        let query = r#"
+                            SELECT kcu.column_name
+                            FROM information_schema.table_constraints AS tc
+                            JOIN information_schema.key_column_usage AS kcu
+                            ON tc.constraint_name = kcu.constraint_name
+                            AND tc.table_name = kcu.table_name
+                            WHERE tc.constraint_type = 'PRIMARY KEY'
+                            AND tc.table_name = $1
+                         "#;
+
+        let primary_key_column_names: Vec<String> = sqlx::query(query)
+            .bind(table_name)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|row| row.get("column_name"))
+            .collect();
+        self.log_query(query.replace("$1", table_name));
+        Ok(primary_key_column_names)
     }
 
     pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, sqlx::Error> {
@@ -183,40 +208,37 @@ impl Repository {
 
         for event in table_data_change_events {
             if let TableDataChangeEvents::ModifyRowColumnValue(row_column_value) = event {
+                let filter_condition = row_column_value
+                    .conditions
+                    .iter()
+                    .map(|condition| {
+                        if condition.data_type == DataType::TEXT {
+                            format!("{} == \"{}\"", condition.column_name, condition.value)
+                        } else {
+                            format!("{} == {}", condition.column_name, condition.value)
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" AND ");
                 // Construct the SQL UPDATE query with dynamic row numbers
                 let query = format!(
                     r#"
-                          WITH OrderedRows AS (
-                            SELECT
-                                ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS row_number, 
-                                ctid
-                            FROM "{}"
-                        )
                         UPDATE "{}"
                         SET "{}" = $1 
-                        FROM OrderedRows
-                        WHERE "{}".ctid = OrderedRows.ctid 
-                          AND OrderedRows.row_number = $2;
+                        WHERE {}
                        "#,
-                    table_name,                   // Table for the subquery
                     table_name,                   // Table for the update
                     row_column_value.column_name, // Column to update
-                    table_name                    // Ensure the update applies to the correct table
+                    filter_condition
                 );
-                let parameters = (&row_column_value.new_value, row_column_value.row_number);
+                let parameters = (&row_column_value.new_value,);
 
                 // Execute the query with parameters
                 sqlx::query(&query)
                     .bind(parameters.0) // Bind the new value
-                    .bind(parameters.1) // Bind the row number
                     .execute(&mut *transaction)
                     .await;
-                self.log_query(
-                    query
-                        .replace("$1", parameters.0)
-                        .replace("$2", &parameters.1.to_string()),
-                )
-                .await;
+                self.log_query(query.replace("$1", parameters.0)).await;
             }
         }
 
