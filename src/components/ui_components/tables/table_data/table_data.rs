@@ -93,6 +93,19 @@ impl UIComponent for TableDataUI {
                 }
                 Task::none()
             }
+            Self::EventType::AddRow => {
+                if let Some(table_inserted_data) = self.table_inserted_data.as_mut() {
+                    let row = (0..table_inserted_data.column_names.len()).fold(
+                        Vec::new(),
+                        |mut values, _| {
+                            values.push(String::new());
+                            values
+                        },
+                    );
+                    table_inserted_data.rows.push(row);
+                }
+                Task::none()
+            }
         }
     }
 }

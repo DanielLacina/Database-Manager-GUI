@@ -12,6 +12,7 @@ pub enum TableDataMessage {
     SetTableData,
     UpdateCell(usize, usize, String),
     DeleteRow(usize),
+    AddRow,
     UpdateTableData,
 }
 

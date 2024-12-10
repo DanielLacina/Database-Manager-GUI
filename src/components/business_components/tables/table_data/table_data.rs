@@ -115,9 +115,6 @@ impl TableData {
     // Add the new event if no matching event was found
     }
 
-    pub async fn insert_into_table(&self, table_inserted_data: BTableInsertedData) {
-        self.repository.insert_into_table(table_inserted_data).await;
-    }
 
     pub async fn update_table_data(&self) {
     // Extract and drop the lock on `table_inserted_data`

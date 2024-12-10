@@ -258,6 +258,22 @@ impl Repository {
                         .unwrap();
                     self.log_query(query).await;
                 }
+
+                TableDataChangeEvents::InsertRow(row_insert_data) => {
+                    let query = format!(
+                        "INSERT INTO \"{}\" ({}) VALUES {}",
+                        table_name,
+                        row_insert_data.column_names.join(", "),
+                        row_insert_data.values.join(", ")
+                    );
+
+                    println!("{}", query);
+                    sqlx::query(&query)
+                        .execute(&mut *transaction)
+                        .await
+                        .unwrap();
+                    self.log_query(query).await;
+                }
             }
         }
 
@@ -293,40 +309,6 @@ impl Repository {
         );
         let table_data_rows = sqlx::query(&query).fetch_all(&self.pool).await;
         table_data_rows
-    }
-
-    pub async fn insert_into_table(&self, table_inserted_data: TableInsertedData) {
-        let column_names: Vec<String> = table_inserted_data
-            .column_names
-            .iter()
-            .map(|column_name| format!("\"{}\"", column_name.clone()))
-            .collect();
-        let column_values: Vec<String> = table_inserted_data
-            .rows
-            .iter()
-            .map(|row| {
-                format!(
-                    "({})",
-                    zip(row, &table_inserted_data.data_types)
-                        // map each column value to datatype by index in both vectors
-                        // in order to wrap '' on values with text datatypes
-                        .map(|(column_value, ref datatype)| {
-                            match datatype {
-                                DataType::TEXT => format!("'{}'", column_value),
-                                _ => column_value.clone(),
-                            }
-                        })
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            })
-            .collect();
-        let query = format!(
-            "INSERT INTO \"{}\" ({}) VALUES {}",
-            table_inserted_data.table_name,
-            column_names.join(", "),
-            column_values.join(", ")
-        );
     }
 
     pub async fn alter_table(
