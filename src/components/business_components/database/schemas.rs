@@ -180,6 +180,7 @@ pub struct RowColumnValue {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RowInsertData {
     pub column_names: Vec<String>,
+    pub data_types: Vec<String>,
     pub values: Vec<String>,
 }
 

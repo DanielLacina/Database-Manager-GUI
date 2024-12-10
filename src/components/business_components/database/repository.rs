@@ -260,11 +260,20 @@ impl Repository {
                 }
 
                 TableDataChangeEvents::InsertRow(row_insert_data) => {
+                    let column_values = zip(&row_insert_data.values, &row_insert_data.data_types)
+                        .map(|(value, data_type)| {
+                            if data_type == BDataType::TEXT {
+                                format!("'{}'", value)
+                            } else {
+                                value
+                            }
+                        })
+                        .collect();
                     let query = format!(
                         "INSERT INTO \"{}\" ({}) VALUES {}",
                         table_name,
                         row_insert_data.column_names.join(", "),
-                        row_insert_data.values.join(", ")
+                        column_values.join(", ")
                     );
 
                     println!("{}", query);
