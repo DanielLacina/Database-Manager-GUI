@@ -11,19 +11,12 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::task;
 
 #[derive(Debug, Clone)]
-struct TableDataChangeEventsInsertRowTracker {
-    pub row_index: usize,
-    pub table_data_change_events_index: usize,
-}
-#[derive(Debug, Clone)]
 pub struct TableData {
     repository: Arc<BRepository>,
     console: Arc<BusinessConsole>,
     pub tables_general_info: Arc<AsyncMutex<Vec<BTableGeneral>>>,
     pub table_inserted_data: Arc<AsyncMutex<Option<BTableInsertedData>>>,
     pub table_data_change_events: Arc<AsyncMutex<Vec<BTableDataChangeEvents>>>,
-    table_data_change_events_insert_row_trackers:
-        Arc<AsyncMutex<Vec<TableDataChangeEventsInsertRowTracker>>>,
     primary_key_column_names: Arc<AsyncMutex<Vec<String>>>,
 }
 impl TableData {
@@ -38,9 +31,12 @@ impl TableData {
             tables_general_info,
             table_inserted_data: Arc::new(AsyncMutex::new(None)),
             table_data_change_events: Arc::new(AsyncMutex::new(vec![])),
-            table_data_change_events_insert_row_trackers: Arc::new(AsyncMutex::new(vec![])),
             primary_key_column_names: Arc::new(AsyncMutex::new(vec![])),
         }
+    }
+
+    fn convert_to_row_number(&self, row_index: usize) -> i32 {
+        (row_index + 1) as i32
     }
 
     fn get_primary_key_conditions(
@@ -63,6 +59,16 @@ impl TableData {
             .collect()
     }
 
+    fn find_existing_row_insert_event(
+        &self,
+        table_data_change_events: &Vec<BTableDataChangeEvents>,
+        row_index: usize,
+    ) -> Option<usize> {
+        table_data_change_events
+            .iter()
+            .position(|existing_event| matches!(existing_event, BTableDataChangeEvents::InsertRow(row_insert_data) if row_insert_data.row_number == convert_to_row_number(row_index)))
+    }
+
     pub fn add_insert_row_event(&self, values: Vec<String>) {
         let locked_table_data = self.table_inserted_data.blocking_lock();
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
@@ -72,14 +78,8 @@ impl TableData {
             column_names: table_data.column_names.clone(),
             values,
             data_types: table_data.data_types.clone(),
+            row_number: (row_index + 1) as i32,
         }));
-        let mut insert_row_trackers = self
-            .table_data_change_events_insert_row_trackers
-            .blocking_lock();
-        insert_row_trackers.push(TableDataChangeEventsInsertRowTracker {
-            row_index,
-            table_data_change_events_index: locked_table_data_change_events.len() - 1,
-        });
         self.console
             .write(format!("{:?}", locked_table_data_change_events));
     }
@@ -96,50 +96,36 @@ impl TableData {
             locked_table_data.as_ref().unwrap().clone() // Clone to minimize locking duration
         };
 
-        // Step 2: Check if the row index is valid
-        if row_index >= table_data.rows.len() {
-            return; // Invalid row index, no further processing needed
-        }
-
         // Step 3: Acquire necessary locks in a consistent order
-        let mut locked_insert_row_trackers = self
-            .table_data_change_events_insert_row_trackers
-            .blocking_lock();
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
 
         // Step 4: Check if there is an existing row insert event
-        if let Some((existing_index, insert_row_tracker)) =
-            self.find_existing_row_insert_event(row_index, locked_insert_row_trackers.clone())
-        {
-            // Create new values
-            let values: Vec<String> = table_data
-                .column_names
-                .iter()
-                .map(|col_name| {
-                    if *col_name == column_name {
-                        new_value.clone()
-                    } else {
-                        String::new()
-                    }
-                })
-                .collect();
+        let values: Vec<String> = table_data
+            .column_names
+            .iter()
+            .map(|col_name| {
+                if *col_name == column_name {
+                    new_value.clone()
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
 
-            // Step 5: Unlock current data, perform insert_row operation without holding locks
-            drop(locked_insert_row_trackers);
+        if let Some(existing_event_index) =
+            self.find_existing_row_insert_event(&locked_table_data_change_events, &values)
+        {
+            locked_table_data_change_events.remove(existing_event_index);
             drop(locked_table_data_change_events);
             self.add_insert_row_event(values);
 
-            // Step 6: Re-acquire locks to modify shared state
-            let mut locked_insert_row_trackers = self
-                .table_data_change_events_insert_row_trackers
-                .blocking_lock();
-            let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
-
             // Remove existing entries
-            locked_table_data_change_events
-                .remove(insert_row_tracker.table_data_change_events_index);
-            locked_insert_row_trackers.remove(existing_index);
             return;
+        }
+
+        // Step 2: Check if the row index is in the database
+        if row_index >= table_data.rows.len() {
+            return; // Invalid row index, no further processing needed
         }
 
         // Step 7: Proceed with new event creation
@@ -150,7 +136,6 @@ impl TableData {
             .position(|col_name| *col_name == column_name)
             .unwrap();
         let data_type = table_data.data_types[column_datatype_index].clone();
-
         let row_column_value = BRowColumnValue {
             conditions: conditions.clone(),
             column_name,
@@ -180,25 +165,10 @@ impl TableData {
         self.console
             .write(format!("{:?}", locked_table_data_change_events));
     }
-    fn find_existing_row_insert_event(
-        &self,
-        row_index: usize,
-        insert_row_trackers: Vec<TableDataChangeEventsInsertRowTracker>,
-    ) -> Option<(usize, TableDataChangeEventsInsertRowTracker)> {
-        println!("{}, {:?}", row_index, insert_row_trackers);
-        insert_row_trackers
-            .clone()
-            .into_iter()
-            .enumerate()
-            .find(|(_, insert_row_tracker)| insert_row_tracker.row_index == row_index)
-    }
 
     pub fn add_delete_row_event(&self, row_index: usize) {
         // Acquire locks for necessary data
         let locked_table_data = self.table_inserted_data.blocking_lock();
-        let mut locked_insert_row_trackers = self
-            .table_data_change_events_insert_row_trackers
-            .blocking_lock();
 
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
 
@@ -211,7 +181,6 @@ impl TableData {
             println!("removing table insert event");
             locked_table_data_change_events
                 .remove(insert_row_tracker.table_data_change_events_index);
-            locked_insert_row_trackers.remove(existing_index);
             return;
         }
         // Ensure the row index is valid
