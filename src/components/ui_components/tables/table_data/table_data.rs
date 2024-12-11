@@ -67,18 +67,15 @@ impl UIComponent for TableDataUI {
                 if let Some(table_inserted_data) = self.table_inserted_data.as_mut() {
                     if let Some(row_data) = table_inserted_data.rows.get_mut(row_index) {
                         if let Some(cell) = row_data.get_mut(col_index) {
-                            *cell = new_value.clone();
-                            let column_name =
-                                self.table_inserted_data.as_ref().unwrap().column_names[col_index]
-                                    .clone();
-                            let modify_column_event =
-                                self.table_data.convert_to_modify_row_column_value_event(
-                                    row_index,
-                                    column_name,
-                                    new_value,
-                                );
-                            self.table_data
-                                .add_table_data_change_event(modify_column_event);
+                            let column_name = table_inserted_data.column_names[col_index].clone();
+
+                            self.table_data.add_modify_row_column_value_event(
+                                row_index,
+                                column_name,
+                                new_value.clone(),
+                            );
+
+                            *cell = new_value;
                         }
                     }
                 }
@@ -86,24 +83,24 @@ impl UIComponent for TableDataUI {
             }
             Self::EventType::DeleteRow(row_index) => {
                 if let Some(table_inserted_data) = self.table_inserted_data.as_mut() {
+                    self.table_data.add_delete_row_event(row_index);
                     table_inserted_data.rows.remove(row_index);
-                    let delete_row_event = self.table_data.convert_to_delete_row_event(row_index);
-                    self.table_data
-                        .add_table_data_change_event(delete_row_event);
                 }
                 Task::none()
             }
             Self::EventType::AddRow => {
                 if let Some(table_inserted_data) = self.table_inserted_data.as_mut() {
-                    let row = (0..table_inserted_data.column_names.len()).fold(
-                        Vec::new(),
-                        |mut values, _| {
-                            values.push(String::new());
-                            values
-                        },
-                    );
-                    table_inserted_data.rows.push(row);
+                    let values: Vec<String> = table_inserted_data
+                        .column_names
+                        .iter()
+                        .map(|col_name| String::new())
+                        .collect();
+
+                    self.table_data.add_insert_row_event(values.clone());
+
+                    table_inserted_data.rows.push(values);
                 }
+
                 Task::none()
             }
         }
@@ -164,7 +161,11 @@ impl TableDataUI {
             let column_headers = self.create_table_header(&table_inserted_data.column_names);
             let rows = self.create_table_rows(&table_inserted_data.rows);
 
-            let table_with_header = Column::new().spacing(10).push(column_headers).push(rows);
+            let table_with_header = Column::new()
+                .spacing(10)
+                .push(column_headers)
+                .push(rows)
+                .push(self.add_row_button());
 
             container(table_with_header)
                 .style(|_| table_container_style())
@@ -212,6 +213,15 @@ impl TableDataUI {
             text("Delete Row").size(16).style(|_| text_style()), // Style the button text
         )
         .on_press(<TableDataUI as UIComponent>::EventType::DeleteRow(row_index).message()) // Trigger the event
+        .padding(10)
+        .style(|_, _| delete_table_row_button_style()) // App
+    }
+
+    fn add_row_button<'a>(&'a self) -> Button<'a, Message> {
+        button(
+            text("Add Row").size(16).style(|_| text_style()), // Style the button text
+        )
+        .on_press(<TableDataUI as UIComponent>::EventType::AddRow.message()) // Trigger the event
         .padding(10)
         .style(|_, _| delete_table_row_button_style()) // App
     }

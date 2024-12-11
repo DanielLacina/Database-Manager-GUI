@@ -58,7 +58,7 @@ impl Repository {
             .into_iter()
             .map(|row| row.get("column_name"))
             .collect();
-        self.log_query(query.replace("$1", table_name));
+        self.log_query(query.replace("$1", table_name)).await;
         Ok(primary_key_column_names)
     }
 
@@ -260,15 +260,16 @@ impl Repository {
                 }
 
                 TableDataChangeEvents::InsertRow(row_insert_data) => {
-                    let column_values = zip(&row_insert_data.values, &row_insert_data.data_types)
-                        .map(|(value, data_type)| {
-                            if data_type == BDataType::TEXT {
-                                format!("'{}'", value)
-                            } else {
-                                value.to_string()
-                            }
-                        })
-                        .collect();
+                    let column_values: Vec<String> =
+                        zip(&row_insert_data.values, &row_insert_data.data_types)
+                            .map(|(value, data_type)| {
+                                if *data_type == DataType::TEXT {
+                                    format!("'{}'", value)
+                                } else {
+                                    value.to_string()
+                                }
+                            })
+                            .collect();
                     let query = format!(
                         "INSERT INTO \"{}\" ({}) VALUES {}",
                         table_name,
