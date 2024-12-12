@@ -58,7 +58,6 @@ impl Repository {
             .into_iter()
             .map(|row| row.get("column_name"))
             .collect();
-        self.log_query(query.replace("$1", table_name)).await;
         Ok(primary_key_column_names)
     }
 
@@ -210,6 +209,7 @@ impl Repository {
         &self,
         table_name: &str,
         table_data_change_events: &Vec<TableDataChangeEvents>,
+        primary_key_column_names: &Vec<String>,
     ) -> Result<(), sqlx::Error> {
         // Start a transaction
         let mut transaction = self.pool.begin().await?;
@@ -260,21 +260,50 @@ impl Repository {
                 }
 
                 TableDataChangeEvents::InsertRow(row_insert_data) => {
-                    let column_values: Vec<String> =
-                        zip(&row_insert_data.values, &row_insert_data.data_types)
-                            .map(|(value, data_type)| {
-                                if *data_type == DataType::TEXT {
-                                    format!("'{}'", value)
+                    let (column_names, values): (Vec<String>, Vec<String>) = row_insert_data
+                        .column_names
+                        .iter()
+                        .zip(
+                            row_insert_data
+                                .values
+                                .iter()
+                                .zip(row_insert_data.data_types.iter()),
+                        )
+                        .map(|(column_name, (value, data_type))| {
+                            // Map the filtered columns to (column_name, value) pairs
+                            if value.is_empty() && primary_key_column_names.contains(column_name) {
+                                // Generate values for primary key columns
+                                let generated_value = if *data_type == DataType::INTEGER {
+                                    format!(
+                                        "(SELECT COUNT(\"{}\") + 1 FROM \"{}\")",
+                                        column_name, table_name
+                                    )
+                                } else if *data_type == DataType::TEXT {
+                                    "gen_random_uuid()::TEXT".to_string()
                                 } else {
-                                    value.to_string()
-                                }
-                            })
-                            .collect();
+                                    "NULL".to_string() // Fallback for unsupported types
+                                };
+
+                                (column_name.to_string(), generated_value)
+                            } else {
+                                (
+                                    column_name.to_string(),
+                                    if value.is_empty() {
+                                        "NULL".to_string()
+                                    } else if *data_type == DataType::TEXT {
+                                        format!("'{}'", value)
+                                    } else {
+                                        value.to_string()
+                                    },
+                                )
+                            }
+                        })
+                        .unzip();
                     let query = format!(
                         "INSERT INTO \"{}\" ({}) VALUES {}",
                         table_name,
-                        row_insert_data.column_names.join(", "),
-                        column_values.join(", ")
+                        column_names.join(", "),
+                        format!("({})", values.join(", "))
                     );
 
                     println!("{}", query);

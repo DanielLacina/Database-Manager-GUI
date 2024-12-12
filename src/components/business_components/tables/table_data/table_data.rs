@@ -35,10 +35,6 @@ impl TableData {
         }
     }
 
-    fn convert_to_row_number(&self, row_index: usize) -> i32 {
-        (row_index + 1) as i32
-    }
-
     fn get_primary_key_conditions(
         &self,
         row_index: usize,
@@ -61,14 +57,31 @@ impl TableData {
 
     fn find_existing_row_insert_event(
         &self,
-        table_data_change_events: &Vec<BTableDataChangeEvents>,
+        table_data_change_events: &[BTableDataChangeEvents],
+        table_data: &BTableInsertedData,
         row_index: usize,
     ) -> Option<usize> {
+        // Calculate the adjusted index for insertion events
+        let delete_row_event_count = table_data_change_events
+            .iter()
+            .filter(|event| matches!(event, BTableDataChangeEvents::DeleteRow(_)))
+            .count();
+        let adjusted_index =
+            row_index.checked_sub(table_data.rows.len() - delete_row_event_count)?;
+
+        // Find the nth InsertRow event index
         table_data_change_events
             .iter()
-            .position(|existing_event| matches!(existing_event, BTableDataChangeEvents::InsertRow(row_insert_data) if row_insert_data.row_number == convert_to_row_number(row_index)))
+            .enumerate()
+            .filter_map(|(index, event)| {
+                if let BTableDataChangeEvents::InsertRow(_) = event {
+                    Some(index)
+                } else {
+                    None
+                }
+            })
+            .nth(adjusted_index)
     }
-
     pub fn add_insert_row_event(&self, values: Vec<String>) {
         let locked_table_data = self.table_inserted_data.blocking_lock();
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
@@ -78,7 +91,6 @@ impl TableData {
             column_names: table_data.column_names.clone(),
             values,
             data_types: table_data.data_types.clone(),
-            row_number: (row_index + 1) as i32,
         }));
         self.console
             .write(format!("{:?}", locked_table_data_change_events));
@@ -100,24 +112,33 @@ impl TableData {
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
 
         // Step 4: Check if there is an existing row insert event
-        let values: Vec<String> = table_data
-            .column_names
-            .iter()
-            .map(|col_name| {
-                if *col_name == column_name {
-                    new_value.clone()
-                } else {
-                    String::new()
-                }
-            })
-            .collect();
 
-        if let Some(existing_event_index) =
-            self.find_existing_row_insert_event(&locked_table_data_change_events, &values)
-        {
-            locked_table_data_change_events.remove(existing_event_index);
-            drop(locked_table_data_change_events);
-            self.add_insert_row_event(values);
+        if let Some(existing_event_index) = self.find_existing_row_insert_event(
+            &locked_table_data_change_events,
+            &table_data,
+            row_index,
+        ) {
+            if let Some(insert_row_event) =
+                locked_table_data_change_events.get_mut(existing_event_index)
+            {
+                match insert_row_event {
+                    BTableDataChangeEvents::InsertRow(row_insert_data) => {
+                        row_insert_data.values =
+                            zip(table_data.column_names, &row_insert_data.values)
+                                .map(|(col_name, value)| {
+                                    if col_name == column_name {
+                                        new_value.clone() // Update the value for the matching column
+                                    } else {
+                                        value.clone() // Keep the existing value
+                                    }
+                                })
+                                .collect();
+                    }
+                    _ => {} // Handle other enum variants if necessary
+                }
+            }
+            self.console
+                .write(format!("{:?}", locked_table_data_change_events));
 
             // Remove existing entries
             return;
@@ -175,12 +196,16 @@ impl TableData {
         // Safely unwrap the locked data
         let table_data = locked_table_data.as_ref().unwrap();
 
-        if let Some((existing_index, insert_row_tracker)) =
-            self.find_existing_row_insert_event(row_index, locked_insert_row_trackers.clone())
-        {
+        if let Some(existing_event_index) = self.find_existing_row_insert_event(
+            &locked_table_data_change_events,
+            &table_data,
+            row_index,
+        ) {
             println!("removing table insert event");
-            locked_table_data_change_events
-                .remove(insert_row_tracker.table_data_change_events_index);
+            locked_table_data_change_events.remove(existing_event_index);
+            self.console
+                .write(format!("{:?}", locked_table_data_change_events));
+
             return;
         }
         // Ensure the row index is valid
@@ -191,8 +216,6 @@ impl TableData {
         // Extract conditions based on primary key column names
         let conditions = self.get_primary_key_conditions(row_index, &table_data);
 
-        // Acquire the lock for data change events
-        let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
         // Add the delete row event
         locked_table_data_change_events.push(BTableDataChangeEvents::DeleteRow(conditions));
 
@@ -214,10 +237,17 @@ impl TableData {
                 return; // If there's no table_inserted_data, exit the function
             }
         };
-        // Use the extracted values without holding the locks
-        self.repository
-            .update_table_data(&table_name, &table_data_change_events)
-            .await;
+        {
+            let locked_primary_key_column_names = self.primary_key_column_names.lock().await;
+            // Use the extracted values without holding the locks
+            self.repository
+                .update_table_data(
+                    &table_name,
+                    &table_data_change_events,
+                    &locked_primary_key_column_names,
+                )
+                .await;
+        }
         self.set_table_data(table_name).await;
     }
     pub async fn set_table_data(&self, table_name: String) {
