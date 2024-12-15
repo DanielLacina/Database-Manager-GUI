@@ -35,6 +35,15 @@ impl TableData {
         }
     }
 
+    pub fn reset_table_data(&self) {
+        let mut locked_table_inserted_data = self.table_inserted_data.blocking_lock();
+        *locked_table_inserted_data = None;
+        let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
+        *locked_table_data_change_events = vec![];
+        let mut locked_primary_key_column_names = self.primary_key_column_names.blocking_lock();
+        *locked_primary_key_column_names = vec![];
+    }
+
     fn get_primary_key_conditions(
         &self,
         row_index: usize,

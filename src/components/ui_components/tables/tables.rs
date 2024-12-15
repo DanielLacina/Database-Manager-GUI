@@ -128,6 +128,12 @@ impl UIComponent for TablesUI {
                             self.single_table_info = None;
                         }
                     }
+                    if let Some(table_name) = self.single_table_data.get_table_name() {
+                        if table_name == table_to_delete {
+                            self.single_table_data =
+                                TableDataUI::new(self.tables.table_data.clone());
+                        }
+                    }
                     self.table_to_delete = None;
                     let tables = self.tables.clone();
 

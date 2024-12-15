@@ -41,6 +41,15 @@ impl TableInfo {
         self.table_change_events.blocking_lock().clone()
     }
 
+    pub fn reset_table_info(&self) {
+        let mut locked_table_name = self.table_name.blocking_lock();
+        *locked_table_name = None;
+        let mut columns_info = self.columns_info.blocking_lock();
+        *columns_info = vec![];
+        let mut table_change_events = self.table_change_events.blocking_lock();
+        *table_change_events = vec![];
+    }
+
     pub async fn set_table_info(&self, table_name: String) {
         let console = self.console.clone();
         let table_change_events = self.table_change_events.clone();

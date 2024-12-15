@@ -123,6 +123,13 @@ impl TableDataUI {
         }
     }
 
+    pub fn get_table_name(&self) -> Option<String> {
+        if let Some(table_inserted_data) = self.table_inserted_data.as_ref() {
+            Some(table_inserted_data.table_name.clone())
+        } else {
+            None
+        }
+    }
     pub fn content<'a>(&'a self) -> Element<'a, Message> {
         // Combine the picklist, table content, and update button into a single column
         Column::new()

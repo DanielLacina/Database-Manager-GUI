@@ -7,6 +7,7 @@ use crate::components::business_components::components::BusinessConsole;
 use crate::components::business_components::tables::utils::set_tables_general_info;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::task;
 
 #[derive(Debug, Clone)]
 pub struct Tables {
@@ -69,6 +70,31 @@ impl Tables {
 
     pub async fn delete_table(&self, table_name: String) {
         self.repository.delete_table(&table_name).await;
+        let table_info = self.table_info.clone();
+        let table_data = self.table_data.clone();
+        task::spawn_blocking(move || {
+            let reset_table_info =
+                if let Some(current_table_name) = table_info.table_name.blocking_lock().as_ref() {
+                    *current_table_name == table_name.to_string()
+                } else {
+                    false
+                };
+            if reset_table_info {
+                table_info.reset_table_info();
+            }
+
+            let reset_table_data = if let Some(table_inserted_data) =
+                table_data.table_inserted_data.blocking_lock().as_ref()
+            {
+                table_inserted_data.table_name == table_name
+            } else {
+                false
+            };
+            if reset_table_data {
+                table_data.reset_table_data();
+            }
+        })
+        .await;
         set_tables_general_info(self.repository.clone(), self.tables_general_info.clone()).await;
     }
 }
