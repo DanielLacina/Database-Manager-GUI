@@ -271,7 +271,7 @@ impl Repository {
                                 // Generate values for primary key columns
                                 let generated_value = if *data_type == DataType::INTEGER {
                                     format!(
-                                        "(SELECT MAX(\"{}\") + 1 FROM \"{}\")",
+                                        "(SELECT COALESCE(MAX(\"{}\"), 0) + 1 FROM \"{}\")",
                                         column_name, table_name
                                     )
                                 } else if *data_type == DataType::TEXT {
