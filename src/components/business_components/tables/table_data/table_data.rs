@@ -108,6 +108,8 @@ impl TableData {
     fn update_modify_row_event(
         &self,
         table_data_change_events: &mut Vec<BTableDataChangeEvents>,
+        table_inserted_data: &BTableInsertedData,
+        row_index: usize,
         event_index: usize,
         column_name: String,
         new_value: String,
@@ -119,7 +121,13 @@ impl TableData {
                     if let Some((data_type, value)) =
                         row_column_value.column_values.get(&column_name)
                     {
-                        if new_value == *value {
+                        let column_index = table_inserted_data
+                            .column_names
+                            .iter()
+                            .position(|col_name| *col_name == column_name)
+                            .unwrap();
+                        let original_value = &table_inserted_data.rows[row_index][column_index];
+                        if new_value == *original_value {
                             row_column_value.column_values.remove(&column_name);
                         }
                         if row_column_value.column_values.len() == 0 {
@@ -204,6 +212,8 @@ impl TableData {
         ) {
             self.update_modify_row_event(
                 &mut locked_table_data_change_events,
+                &table_inserted_data,
+                row_index,
                 existing_event_index,
                 column_name,
                 new_value,
@@ -362,14 +372,13 @@ mod tests {
     use crate::components::business_components::component::{
         repository_module::BRepositoryConsole, BTableGeneral, BTableIn,
     };
-    use crate::components::business_components::tables::{
-        test_utils::{
-            create_btable_general, create_repository_table_and_console, default_table_in,
-            sort_columns, sort_tables_general_info,
-        },
-        utils::set_tables_general_info,
+    use crate::components::business_components::tables::test_utils::{
+        create_btable_general, create_repository_table_and_console, default_table_in, sort_columns,
+        sort_tables_general_info,
     };
+    use crate::components::business_components::tables::utils::set_tables_general_info;
     use sqlx::PgPool;
+    use std::collections::HashMap;
 
     async fn create_table_data(
         pool: PgPool,
@@ -386,21 +395,6 @@ mod tests {
         let table_data = TableData::new(repository_result, console_result, tables_general_info);
         table_data.set_table_data(table_in.table_name.clone()).await;
         table_data
-    }
-
-    fn to_insert_table_rows(
-        table_data_change_events: &Vec<BTableDataChangeEvents>,
-    ) -> Vec<Vec<String>> {
-        let mut table_inserted_rows: Vec<Vec<String>> = Vec::new();
-        for event in table_data_change_events {
-            match event {
-                BTableDataChangeEvents::InsertRow(row_insert_data) => {
-                    table_inserted_rows.push(row_insert_data.values.clone());
-                }
-                _ => {}
-            }
-        }
-        table_inserted_rows
     }
 
     #[sqlx::test]
@@ -440,7 +434,7 @@ mod tests {
         let table_data = Arc::new(create_table_data(pool, &table_in, &insert_row_events).await);
         let copied_table_data = table_data.clone();
         task::spawn_blocking(move || {
-            copied_table_data.add_modify_row_column_value_event(0, id.clone(), String::from("5"));
+            copied_table_data.add_modify_row_column_value_event(0, id.clone(), "5".to_string());
             copied_table_data.add_modify_row_column_value_event(
                 3,
                 name.clone(),
@@ -455,6 +449,11 @@ mod tests {
                 name.clone(),
                 "John".to_string(),
             );
+            copied_table_data.add_modify_row_column_value_event(
+                3,
+                name.clone(),
+                "Daniel".to_string(),
+            );
         })
         .await;
 
@@ -467,7 +466,7 @@ mod tests {
                 vec!["3".to_string(), "Charlie".to_string()],
                 vec!["5".to_string(), "Alice".to_string()],
                 vec!["6".to_string(), "".to_string()],
-                vec!["8".to_string(), "Liam".to_string()],
+                vec!["8".to_string(), "Daniel".to_string()],
             ],
         };
         let locked_table_inserted_data = table_data.table_inserted_data.lock().await;
