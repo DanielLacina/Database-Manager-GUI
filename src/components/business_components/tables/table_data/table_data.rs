@@ -5,6 +5,7 @@ use crate::components::business_components::component::{
 };
 use crate::components::business_components::components::BusinessConsole;
 use sqlx::Row;
+use std::collections::HashMap;
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -94,6 +95,47 @@ impl TableData {
             .nth(index_of_events_filtered_by_insert_row)
     }
 
+    fn find_existing_modify_row_event(
+        &self,
+        table_data_change_events: &[BTableDataChangeEvents],
+        table_inserted_data: &BTableInsertedData,
+        row_index: usize,
+    ) -> Option<usize> {
+        let conditions = self.get_primary_key_conditions(row_index, table_inserted_data);
+        table_data_change_events.iter().position(|event| matches!(event, BTableDataChangeEvents::ModifyRowColumnValue(row_column_value) if row_column_value.conditions == conditions))
+    }
+
+    fn update_modify_row_event(
+        &self,
+        table_data_change_events: &mut Vec<BTableDataChangeEvents>,
+        event_index: usize,
+        column_name: String,
+        new_value: String,
+        data_type: BDataType,
+    ) {
+        if let Some(event) = table_data_change_events.get_mut(event_index) {
+            match event {
+                BTableDataChangeEvents::ModifyRowColumnValue(row_column_value) => {
+                    if let Some((data_type, value)) =
+                        row_column_value.column_values.get(&column_name)
+                    {
+                        if new_value == *value {
+                            row_column_value.column_values.remove(&column_name);
+                        }
+                        if row_column_value.column_values.len() == 0 {
+                            table_data_change_events.remove(event_index);
+                        }
+                    } else {
+                        row_column_value
+                            .column_values
+                            .insert(column_name, (data_type, new_value));
+                    }
+                }
+                _ => {} // Handle other enum variants if necessary
+            }
+        }
+    }
+
     pub fn add_insert_row_event(&self, values: Vec<String>) {
         let locked_table_inserted_data = self.table_inserted_data.blocking_lock();
         let mut locked_table_data_change_events = self.table_data_change_events.blocking_lock();
@@ -147,8 +189,6 @@ impl TableData {
             return; // Invalid row index, no further processing needed
         }
 
-        // Step 7: Proceed with new event creation
-        let conditions = self.get_primary_key_conditions(row_index, &table_inserted_data);
         let column_datatype_index = table_inserted_data
             .column_names
             .iter()
@@ -156,26 +196,35 @@ impl TableData {
             .unwrap();
 
         let data_type = table_inserted_data.data_types[column_datatype_index].clone();
-
-        let row_column_value = BRowColumnValue {
-            conditions: conditions.clone(),
-            column_name,
-            new_value,
-            data_type,
-        };
-
         // Step 8: Check for existing event and replace if necessary
-        if let Some(existing_event_index) = self.find_existing_modify_row_column_event(
-            &row_column_value.conditions,
+        if let Some(existing_event_index) = self.find_existing_modify_row_event(
             &locked_table_data_change_events,
+            &table_inserted_data,
+            row_index,
         ) {
-            locked_table_data_change_events.remove(existing_event_index);
-        }
+            self.update_modify_row_event(
+                &mut locked_table_data_change_events,
+                existing_event_index,
+                column_name,
+                new_value,
+                data_type,
+            );
+        } else {
+            // Step 7: Proceed with new event creation
+            let conditions = self.get_primary_key_conditions(row_index, &table_inserted_data);
 
-        // Add the new event
-        locked_table_data_change_events.push(BTableDataChangeEvents::ModifyRowColumnValue(
-            row_column_value,
-        ));
+            let mut column_values = HashMap::new();
+            column_values.insert(column_name, (data_type, new_value));
+            let row_column_value = BRowColumnValue {
+                conditions: conditions.clone(),
+                column_values,
+            };
+
+            // Add the new event
+            locked_table_data_change_events.push(BTableDataChangeEvents::ModifyRowColumnValue(
+                row_column_value,
+            ));
+        }
         self.console
             .write(format!("{:?}", locked_table_data_change_events));
     }
@@ -202,23 +251,6 @@ impl TableData {
             }
             _ => {} // Handle other enum variants if necessary
         }
-    }
-
-    fn find_existing_modify_row_column_event(
-        &self,
-        conditions: &Vec<BCondition>,
-        locked_table_data_change_events: &Vec<BTableDataChangeEvents>,
-    ) -> Option<usize> {
-        locked_table_data_change_events
-        .iter()
-        .position(|existing_event| {
-            matches!(
-                existing_event,
-                BTableDataChangeEvents::ModifyRowColumnValue(existing_row_column_value)
-                if zip(conditions, &existing_row_column_value.conditions)
-                    .all(|(condition, existing_condition)| condition.value == existing_condition.value)
-            )
-        })
     }
 
     pub fn add_delete_row_event(&self, row_index: usize) {
@@ -399,15 +431,30 @@ mod tests {
                 data_types: data_types.clone(),
                 values: vec!["3".to_string(), "Charlie".to_string()],
             }),
+            BTableDataChangeEvents::InsertRow(BRowInsertData {
+                column_names: column_names.clone(),
+                data_types: data_types.clone(),
+                values: vec!["4".to_string(), "Jacob".to_string()],
+            }),
         ];
         let table_data = Arc::new(create_table_data(pool, &table_in, &insert_row_events).await);
         let copied_table_data = table_data.clone();
         task::spawn_blocking(move || {
-            copied_table_data.add_modify_row_column_value_event(0, id, String::from("5"));
+            copied_table_data.add_modify_row_column_value_event(0, id.clone(), String::from("5"));
+            copied_table_data.add_modify_row_column_value_event(
+                3,
+                name.clone(),
+                "Liam".to_string(),
+            );
+            copied_table_data.add_modify_row_column_value_event(3, id.clone(), "8".to_string());
             copied_table_data.add_delete_row_event(1);
-            copied_table_data.add_insert_row_event(vec!["".to_string(), "".to_string()]);
+            copied_table_data.add_insert_row_event(vec!["6".to_string(), "".to_string()]);
             // row index is out of range
-            copied_table_data.add_modify_row_column_value_event(3, name, "John".to_string());
+            copied_table_data.add_modify_row_column_value_event(
+                4,
+                name.clone(),
+                "John".to_string(),
+            );
         })
         .await;
 
@@ -420,6 +467,7 @@ mod tests {
                 vec!["3".to_string(), "Charlie".to_string()],
                 vec!["5".to_string(), "Alice".to_string()],
                 vec!["6".to_string(), "".to_string()],
+                vec!["8".to_string(), "Liam".to_string()],
             ],
         };
         let locked_table_inserted_data = table_data.table_inserted_data.lock().await;

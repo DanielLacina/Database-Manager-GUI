@@ -172,9 +172,7 @@ pub struct Condition {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RowColumnValue {
     pub conditions: Vec<Condition>,
-    pub column_name: String,
-    pub data_type: DataType,
-    pub new_value: String,
+    pub column_values: HashMap<String, (DataType, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
