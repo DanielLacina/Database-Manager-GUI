@@ -92,10 +92,13 @@ impl<T: ForeignKeyDropdownEvents> ForeignKeyDropDownUI<T> {
     }
 
     fn foreign_key_column_picklist<'a>(&'a self, table: BTableGeneral) -> Element<'a, Message> {
-        let options: Vec<String> = zip(&table.column_names, &table.data_types)
-            .filter(|(_, &ref datatype)| *datatype == self.column.datatype)
-            .map(|(name, _)| name.clone())
-            .collect();
+        let options: Vec<String> = zip(
+            zip(&table.column_names, &table.data_types),
+            &table.is_unique,
+        )
+        .filter(|((_, &ref datatype), is_unique)| *datatype == self.column.datatype && **is_unique)
+        .map(|((name, _), _)| name.clone())
+        .collect();
         let selected: Option<String> = None;
         PickList::new(options, selected, move |column_name| {
             self.events.add_foreign_key(

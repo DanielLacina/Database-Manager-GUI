@@ -14,6 +14,7 @@ pub struct TableGeneralInfo {
     pub table_name: String,
     pub column_names: Vec<String>,
     pub data_types: Vec<String>,
+    pub is_unique: Vec<bool>,
 }
 
 #[derive(sqlx::FromRow, Debug, Clone, PartialEq)]

@@ -86,6 +86,7 @@ pub struct TableGeneral {
     pub table_name: String,
     pub column_names: Vec<String>,
     pub data_types: Vec<DataType>,
+    pub is_unique: Vec<bool>,
 }
 
 impl TableGeneral {
@@ -98,6 +99,7 @@ impl TableGeneral {
                 .into_iter()
                 .map(|data_type| DataType::to_datatype(data_type))
                 .collect(),
+            is_unique: table_general_info.is_unique,
         }
     }
 }
@@ -172,9 +174,7 @@ pub struct Condition {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RowColumnValue {
     pub conditions: Vec<Condition>,
-    pub column_name: String,
-    pub data_type: DataType,
-    pub new_value: String,
+    pub column_values: HashMap<String, (DataType, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -8,6 +8,7 @@ use crate::components::business_components::database::{
     },
 };
 use sqlx::{postgres::PgRow, Executor, PgPool, Postgres, Row, Transaction};
+use std::collections::HashMap;
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -62,21 +63,44 @@ impl Repository {
     }
 
     pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, sqlx::Error> {
-        let query = "SELECT
-                    t.table_name,
-                    array_agg(c.column_name::TEXT) AS column_names,
-                    array_agg(c.data_type::TEXT) AS data_types
-                FROM
-                    information_schema.tables t
-                INNER JOIN
-                    information_schema.columns c
-                ON
-                    t.table_name = c.table_name AND t.table_schema = c.table_schema
-                WHERE
-                    t.table_schema = 'public'
-                    AND t.table_type = 'BASE TABLE'
-                GROUP BY
-                    t.table_name";
+        let query = "
+        SELECT
+            t.table_name,
+            array_agg(c.column_name::TEXT) AS column_names,
+            array_agg(c.data_type::TEXT) AS data_types,
+            array_agg(
+                CASE 
+                    WHEN u.column_name IS NOT NULL THEN true 
+                    ELSE false 
+                END
+            ) AS is_unique
+        FROM
+            information_schema.tables t
+        INNER JOIN
+            information_schema.columns c
+        ON
+            t.table_name = c.table_name AND t.table_schema = c.table_schema
+        LEFT JOIN (
+            SELECT
+                tc.table_name,
+                kcu.column_name
+            FROM
+                information_schema.table_constraints tc
+            INNER JOIN
+                information_schema.key_column_usage kcu
+            ON
+                tc.constraint_name = kcu.constraint_name
+                AND tc.table_name = kcu.table_name
+            WHERE
+                tc.constraint_type IN ('UNIQUE', 'PRIMARY KEY')
+        ) u
+        ON
+            c.table_name = u.table_name AND c.column_name = u.column_name
+        WHERE
+            t.table_schema = 'public'
+            AND t.table_type = 'BASE TABLE'
+        GROUP BY
+            t.table_name";
         let res = sqlx::query_as::<_, TableGeneralInfo>(query)
             .fetch_all(&self.pool)
             .await;
@@ -200,9 +224,31 @@ impl Repository {
     fn get_filter_condition(&self, conditions: &Vec<Condition>) -> String {
         conditions
             .iter()
-            .map(|condition| format!("{} = {}", condition.column_name, condition.value))
+            .map(|condition| {
+                let value = if condition.data_type == DataType::TEXT {
+                    format!("'{}'", condition.value)
+                } else {
+                    condition.value.clone()
+                };
+                format!("{} = {}", condition.column_name, value)
+            })
             .collect::<Vec<String>>()
             .join(" AND ")
+    }
+
+    fn get_updates(&self, updated_column_values: &HashMap<String, (DataType, String)>) -> String {
+        updated_column_values
+            .iter()
+            .map(|(column_name, (data_type, new_value))| {
+                let value = if *data_type == DataType::TEXT {
+                    format!("'{}'", new_value)
+                } else {
+                    new_value.clone()
+                };
+                format!("\"{}\" = {}", column_name, value)
+            })
+            .collect::<Vec<String>>()
+            .join(", ")
     }
 
     pub async fn update_table_data(
@@ -218,29 +264,21 @@ impl Repository {
             match event {
                 TableDataChangeEvents::ModifyRowColumnValue(row_column_value) => {
                     let filter_condition = self.get_filter_condition(&row_column_value.conditions);
-                    // Construct the SQL UPDATE query with dynamic row numbers
-                    let bind_parameter = if row_column_value.data_type == DataType::INTEGER {
-                        "$1::INTEGER"
-                    } else {
-                        "$1"
-                    };
+                    let updates = self.get_updates(&row_column_value.column_values);
                     let query = format!(
-                        "UPDATE \"{}\" SET \"{}\" = {} WHERE {}",
-                        table_name,                   // Table for the update
-                        row_column_value.column_name, // Column to update
-                        bind_parameter,
+                        "UPDATE \"{}\" SET {} WHERE {}",
+                        table_name, // Table for the update
+                        updates,
                         filter_condition
                     );
-                    let parameters = (&row_column_value.new_value,);
 
                     // Execute the query with parameters
-                    println!("{}", query.replace("$1", parameters.0));
+                    println!("{}", query);
                     sqlx::query(&query)
-                        .bind(parameters.0) // Bind the new value
                         .execute(&mut *transaction)
                         .await
                         .unwrap();
-                    self.log_query(query.replace("$1", parameters.0)).await;
+                    self.log_query(query).await;
                 }
 
                 TableDataChangeEvents::DeleteRow(conditions) => {
