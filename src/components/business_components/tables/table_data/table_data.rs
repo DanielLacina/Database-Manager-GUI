@@ -19,6 +19,7 @@ pub struct TableData {
     pub table_inserted_data: Arc<AsyncMutex<Option<BTableInsertedData>>>,
     table_data_change_events: Arc<AsyncMutex<Vec<BTableDataChangeEvents>>>,
     primary_key_column_names: Arc<AsyncMutex<Vec<String>>>,
+    current_to_initial_row_indexes: Arc<AsyncMutex<HashMap<usize, usize>>>,
 }
 impl TableData {
     pub fn new(
@@ -33,6 +34,7 @@ impl TableData {
             table_inserted_data: Arc::new(AsyncMutex::new(None)),
             table_data_change_events: Arc::new(AsyncMutex::new(vec![])),
             primary_key_column_names: Arc::new(AsyncMutex::new(vec![])),
+            current_to_initial_row_indexes: Arc::new(AsyncMutex::new(HashMap::new())),
         }
     }
 
@@ -43,6 +45,9 @@ impl TableData {
         *locked_table_data_change_events = vec![];
         let mut locked_primary_key_column_names = self.primary_key_column_names.blocking_lock();
         *locked_primary_key_column_names = vec![];
+        let mut locked_current_to_initial_row_indexes =
+            self.current_to_initial_row_indexes.blocking_lock();
+        *locked_current_to_initial_row_indexes = HashMap::new();
     }
 
     fn get_primary_key_conditions(
@@ -50,13 +55,19 @@ impl TableData {
         row_index: usize,
         table_inserted_data: &BTableInsertedData,
     ) -> Vec<BCondition> {
-        let primary_key_columns = self.primary_key_column_names.blocking_lock();
+        let primary_key_column_names = self.primary_key_column_names.blocking_lock();
+        let adjusted_row_index = self
+            .current_to_initial_row_indexes
+            .blocking_lock()
+            .get(&row_index)
+            .unwrap()
+            .clone();
         table_inserted_data
             .column_names
             .iter()
             .zip(&table_inserted_data.data_types)
-            .zip(&table_inserted_data.rows[row_index])
-            .filter(|((column_name, _), _)| primary_key_columns.contains(column_name))
+            .zip(&table_inserted_data.rows[adjusted_row_index])
+            .filter(|((column_name, _), _)| primary_key_column_names.contains(column_name))
             .map(|((column_name, data_type), value)| BCondition {
                 column_name: column_name.clone(),
                 data_type: data_type.clone(),
@@ -129,9 +140,13 @@ impl TableData {
                         let original_value = &table_inserted_data.rows[row_index][column_index];
                         if new_value == *original_value {
                             row_column_value.column_values.remove(&column_name);
-                        }
-                        if row_column_value.column_values.len() == 0 {
-                            table_data_change_events.remove(event_index);
+                            if row_column_value.column_values.len() == 0 {
+                                table_data_change_events.remove(event_index);
+                            }
+                        } else {
+                            row_column_value
+                                .column_values
+                                .insert(column_name, (data_type.clone(), new_value));
                         }
                     } else {
                         row_column_value
@@ -221,10 +236,9 @@ impl TableData {
             );
         } else {
             // Step 7: Proceed with new event creation
-            let conditions = self.get_primary_key_conditions(row_index, &table_inserted_data);
-
+            let mut conditions = self.get_primary_key_conditions(row_index, &table_inserted_data);
             let mut column_values = HashMap::new();
-            column_values.insert(column_name, (data_type, new_value));
+            column_values.insert(column_name.clone(), (data_type, new_value.clone()));
             let row_column_value = BRowColumnValue {
                 conditions: conditions.clone(),
                 column_values,
@@ -293,7 +307,29 @@ impl TableData {
 
         // Add the delete row event
         locked_table_data_change_events.push(BTableDataChangeEvents::DeleteRow(conditions));
+        let mut locked_current_to_initial_row_indexes =
+            self.current_to_initial_row_indexes.blocking_lock();
 
+        let mut keys_to_update: Vec<_> = locked_current_to_initial_row_indexes
+            .keys()
+            .cloned()
+            .filter(|current_row_index| *current_row_index > row_index)
+            .collect();
+
+        keys_to_update.sort_by(|a, b| b.cmp(a));
+
+        for (iter_index, current_row_index) in keys_to_update.iter().enumerate() {
+            let initial_row_index = locked_current_to_initial_row_indexes
+                .get(&current_row_index)
+                .unwrap()
+                .clone();
+            let new_current_row_index = current_row_index - 1;
+            locked_current_to_initial_row_indexes
+                .insert(new_current_row_index, initial_row_index.clone());
+            if iter_index == 0 {
+                locked_current_to_initial_row_indexes.remove(current_row_index);
+            }
+        }
         // Log the current state of table data change events to the console
         self.console
             .write(format!("{:?}", *locked_table_data_change_events));
@@ -342,6 +378,8 @@ impl TableData {
                 )
                 .await
                 .unwrap();
+            let mut locked_current_to_initial_row_indexes =
+                self.current_to_initial_row_indexes.lock().await;
             // Construct the inserted data
             let table_inserted_data = BTableInsertedData {
                 table_name: table_name.clone(),
@@ -358,7 +396,10 @@ impl TableData {
                     })
                     .collect::<Vec<Vec<String>>>(),
             };
-            // Update the shared table inserted data
+            *locked_current_to_initial_row_indexes = HashMap::new();
+            for (index, _) in table_inserted_data.rows.iter().enumerate() {
+                locked_current_to_initial_row_indexes.insert(index, index);
+            } // Update the shared table inserted data
             *self.table_inserted_data.lock().await = Some(table_inserted_data);
             *self.table_data_change_events.lock().await = vec![];
             *self.primary_key_column_names.lock().await = primary_key_column_names;
@@ -440,6 +481,7 @@ mod tests {
                 name.clone(),
                 "Liam".to_string(),
             );
+
             copied_table_data.add_modify_row_column_value_event(3, id.clone(), "8".to_string());
             copied_table_data.add_delete_row_event(1);
             copied_table_data.add_insert_row_event(vec!["6".to_string(), "".to_string()]);
@@ -450,10 +492,12 @@ mod tests {
                 "John".to_string(),
             );
             copied_table_data.add_modify_row_column_value_event(
-                3,
+                2,
                 name.clone(),
                 "Daniel".to_string(),
             );
+
+            // since there was a delete row event index 3 -> 2
         })
         .await;
 

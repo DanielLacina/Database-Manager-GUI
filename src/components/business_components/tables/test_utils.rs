@@ -65,6 +65,11 @@ pub fn create_btable_general(table_in: &BTableIn) -> BTableGeneral {
             .iter()
             .map(|col| col.datatype.clone())
             .collect(),
+        is_unique: table_in
+            .columns
+            .iter()
+            .map(|col| col.constraints.contains(&BConstraint::PrimaryKey))
+            .collect(),
     }
 }
 

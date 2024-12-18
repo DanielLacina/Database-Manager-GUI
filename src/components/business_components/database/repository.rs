@@ -63,21 +63,44 @@ impl Repository {
     }
 
     pub async fn get_general_tables_info(&self) -> Result<Vec<TableGeneralInfo>, sqlx::Error> {
-        let query = "SELECT
-                    t.table_name,
-                    array_agg(c.column_name::TEXT) AS column_names,
-                    array_agg(c.data_type::TEXT) AS data_types
-                FROM
-                    information_schema.tables t
-                INNER JOIN
-                    information_schema.columns c
-                ON
-                    t.table_name = c.table_name AND t.table_schema = c.table_schema
-                WHERE
-                    t.table_schema = 'public'
-                    AND t.table_type = 'BASE TABLE'
-                GROUP BY
-                    t.table_name";
+        let query = "
+        SELECT
+            t.table_name,
+            array_agg(c.column_name::TEXT) AS column_names,
+            array_agg(c.data_type::TEXT) AS data_types,
+            array_agg(
+                CASE 
+                    WHEN u.column_name IS NOT NULL THEN true 
+                    ELSE false 
+                END
+            ) AS is_unique
+        FROM
+            information_schema.tables t
+        INNER JOIN
+            information_schema.columns c
+        ON
+            t.table_name = c.table_name AND t.table_schema = c.table_schema
+        LEFT JOIN (
+            SELECT
+                tc.table_name,
+                kcu.column_name
+            FROM
+                information_schema.table_constraints tc
+            INNER JOIN
+                information_schema.key_column_usage kcu
+            ON
+                tc.constraint_name = kcu.constraint_name
+                AND tc.table_name = kcu.table_name
+            WHERE
+                tc.constraint_type IN ('UNIQUE', 'PRIMARY KEY')
+        ) u
+        ON
+            c.table_name = u.table_name AND c.column_name = u.column_name
+        WHERE
+            t.table_schema = 'public'
+            AND t.table_type = 'BASE TABLE'
+        GROUP BY
+            t.table_name";
         let res = sqlx::query_as::<_, TableGeneralInfo>(query)
             .fetch_all(&self.pool)
             .await;
