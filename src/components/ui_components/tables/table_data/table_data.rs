@@ -161,13 +161,12 @@ impl TableDataUI {
 
     fn create_table_content<'a>(&'a self) -> Element<'a, Message> {
         if let Some(ref table_inserted_data) = self.table_inserted_data {
-            let column_headers = self.create_table_header(&table_inserted_data.column_names);
-            let rows = self.create_table_rows(&table_inserted_data.rows);
-
             let table_with_header = Column::new()
                 .spacing(10)
-                .push(column_headers)
-                .push(rows)
+                .push(self.table_column_names_and_rows(
+                    &table_inserted_data.column_names,
+                    &table_inserted_data.rows,
+                ))
                 .push(self.add_row_button());
 
             container(table_with_header)
@@ -180,34 +179,38 @@ impl TableDataUI {
         }
     }
 
-    fn create_table_header<'a>(&'a self, column_names: &[String]) -> Row<'a, Message> {
-        column_names.iter().enumerate().fold(
+    fn table_column_names_and_rows<'a>(
+        &'a self,
+        column_names: &Vec<String>,
+        rows: &[Vec<String>],
+    ) -> Scrollable<'a, Message> {
+        let mut table_column_names_and_rows = Column::new();
+
+        let column_names = column_names.iter().enumerate().fold(
             Row::new().spacing(10),
             |row, (col_index, col_name)| {
                 row.push(
-                    container(text(col_name.clone()).size(16).style(|_| text_style()))
-                        .width(Length::FillPortion(1)), // Ensure each column takes equal space
+                    container(text(col_name.clone()).size(16).style(|_| text_style())).width(100), // Ensure each column takes equal space
                 )
             },
-        )
-    }
-    fn create_table_rows<'a>(&'a self, rows: &[Vec<String>]) -> Scrollable<'a, Message> {
-        scrollable(rows.iter().enumerate().fold(
-            Column::new().spacing(10),
-            |col, (row_index, row)| {
-                let row_display = self.create_table_row(row, row_index);
-                col.push(row_display)
-            },
-        ))
-        .direction(scrollable::Direction::Both {
-            vertical: scrollable::Scrollbar::new(),
-            horizontal: scrollable::Scrollbar::new(),
-        })
-        .height(Length::Fill)
+        );
+        table_column_names_and_rows = table_column_names_and_rows.push(column_names);
+
+        for (row_index, row) in rows.iter().enumerate() {
+            table_column_names_and_rows =
+                table_column_names_and_rows.push(self.create_table_row(row, row_index));
+        }
+
+        scrollable(table_column_names_and_rows)
+            .direction(scrollable::Direction::Both {
+                vertical: scrollable::Scrollbar::new(),
+                horizontal: scrollable::Scrollbar::new(),
+            })
+            .height(Length::Fill)
     }
 
     fn create_table_row<'a>(&'a self, row: &[String], row_index: usize) -> Row<'a, Message> {
-        let mut table_row = Row::new().spacing(10);
+        let mut table_row = Row::new().spacing(10).align_y(Vertical::Center);
         for (col_index, value) in row.iter().enumerate() {
             table_row = table_row.push(
                 container(self.create_table_column_value(row_index, col_index, value.as_str()))
@@ -289,7 +292,7 @@ fn table_container_style() -> container::Style {
         shadow: Shadow {
             color: Color::from_rgba(0.0, 0.7, 1.0, 0.3), // Neon glow effect
             offset: Vector::new(0.0, 4.0),
-            blur_radius: 10.0,
+            blur_radius: 5.0,
         },
     }
 }
@@ -322,7 +325,7 @@ fn reset_table_data_button_style() -> button::Style {
         shadow: Shadow {
             color: Color::from_rgba(0.0, 0.7, 1.0, 0.3),
             offset: Vector::new(0.0, 4.0), // Slight vertical shadow offset
-            blur_radius: 10.0,             // Smooth shadow edges
+            blur_radius: 5.0,              // Smooth shadow edges
         },
     }
 }
@@ -339,7 +342,7 @@ fn update_table_data_button_style() -> button::Style {
         shadow: Shadow {
             color: Color::from_rgba(1.0, 0.2, 0.2, 0.3), // Neon glow effect
             offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
-            blur_radius: 10.0,                           // Smooth shadow edges
+            blur_radius: 5.0,                            // Smooth shadow edges
         },
     }
 }
@@ -356,7 +359,7 @@ fn add_table_row_button_style() -> button::Style {
         shadow: Shadow {
             color: Color::from_rgba(0.0, 0.8, 1.0, 0.3), // Subtle lighter turquoise-blue glow
             offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
-            blur_radius: 10.0,                           // Smooth shadow edges
+            blur_radius: 5.0,                            // Smooth shadow edges
         },
     }
 }
@@ -369,11 +372,11 @@ fn delete_table_row_button_style() -> button::Style {
             width: 2.0,
             radius: Radius::from(8.0), // Rounded corners
         },
-        text_color: Color::from_rgb(1.0, 0.9, 0.9), // Slightly off-white text for contrast
+        text_color: Color::WHITE,
         shadow: Shadow {
-            color: Color::from_rgba(1.0, 0.2, 0.2, 0.3), // Subtle red glow
-            offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
-            blur_radius: 10.0,                           // Smooth shadow edges
+            color: Color::from_rgb(0.0, 0.0, 0.0),
+            offset: Vector::new(0.0, 2.0),
+            blur_radius: 5.0,
         },
     }
 }
