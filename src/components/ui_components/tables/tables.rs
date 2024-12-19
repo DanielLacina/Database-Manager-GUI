@@ -30,14 +30,15 @@ use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone)]
 pub struct TablesUI {
-    pub table_filter: String,
-    pub show_create_table_form: bool,
-    pub create_table_form: CreateTableFormUI,
-    pub tables: Arc<BusinessTables>,
-    pub single_table_info: Option<TableInfoUI>,
-    pub show_single_table_data: bool,
-    pub single_table_data: TableDataUI,
-    pub table_to_delete: Option<String>,
+    table_filter: String,
+    show_create_table_form: bool,
+    create_table_form: CreateTableFormUI,
+    tables: Arc<BusinessTables>,
+    single_table_info: Option<TableInfoUI>,
+    show_single_table_data: bool,
+    single_table_data: TableDataUI,
+    table_to_delete: Option<String>,
+    show_tables: bool,
 }
 
 impl UIComponent for TablesUI {
@@ -104,6 +105,10 @@ impl UIComponent for TablesUI {
             Self::EventType::SingleTableData(table_data_message) => {
                 self.single_table_data.update(table_data_message)
             }
+            Self::EventType::ShowOrRemoveTables => {
+                self.show_tables = !self.show_tables;
+                Task::none()
+            }
 
             Self::EventType::RequestDeleteTable(table_name) => {
                 self.table_to_delete = Some(table_name);
@@ -167,6 +172,7 @@ impl TablesUI {
             tables,
             single_table_info: None,
             table_to_delete: None,
+            show_tables: true,
         }
     }
 
@@ -177,7 +183,16 @@ impl TablesUI {
             .spacing(20)
             .padding(20);
 
-        row = row.push(self.tables_section());
+        if self.show_tables {
+            row = row.push(self.tables_section());
+        }
+        if !self.show_tables {
+            row = row.push(
+                button("Show Tables")
+                    .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveTables.message()),
+            );
+        }
+
         if self.show_create_table_form {
             row = row.push(self.tables_component_section(
                 self.create_table_form.content(),
@@ -226,8 +241,6 @@ impl TablesUI {
         container(component_section).width(Length::Fill)
     }
 
-    // ======================== SECTION: Tables Display ========================
-
     fn tables_section<'a>(&'a self) -> Element<'a, Message> {
         let mut tables_display = Column::new().spacing(10).padding(10);
         tables_display = tables_display.push(self.table_filter_input());
@@ -259,10 +272,16 @@ impl TablesUI {
         .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveTableData.message())
         .padding(10);
 
+        let toggle_tables_button = button("Remove tables")
+            .style(|_, _| button_style())
+            .on_press(<TablesUI as UIComponent>::EventType::ShowOrRemoveTables.message())
+            .padding(10);
+
         Column::new()
             .push(scrollable_section)
             .push(toggle_form_button)
             .push(toggle_table_data_button)
+            .push(toggle_tables_button)
             .spacing(10)
             .padding(10)
             .width(Length::Fill)
@@ -372,7 +391,6 @@ impl TablesUI {
     }
 }
 
-// ======================== STYLES ========================
 fn container_style() -> container::Style {
     container::Style {
         background: Some(Background::Color(Color::from_rgb(0.1, 0.1, 0.1))), // Background color
@@ -419,23 +437,6 @@ fn delete_button_style() -> button::Style {
             color: Color::BLACK,
             offset: Vector::new(0.0, 3.0),
             blur_radius: 5.0,
-        },
-    }
-}
-
-fn create_button_style() -> button::Style {
-    button::Style {
-        background: Some(Background::Color(Color::from_rgb(0.0, 0.5, 0.9))),
-        border: Border {
-            color: Color::from_rgb(0.0, 0.4, 0.7),
-            width: 2.0,
-            radius: Radius::from(8.0),
-        },
-        text_color: Color::WHITE,
-        shadow: Shadow {
-            color: Color::BLACK,
-            offset: Vector::new(0.0, 3.0),
-            blur_radius: 7.0,
         },
     }
 }

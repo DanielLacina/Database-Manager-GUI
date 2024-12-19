@@ -13,6 +13,7 @@ pub enum TablesMessage {
     UpdateTableFilter(String),
     ShowOrRemoveCreateTableForm,
     ShowOrRemoveTableData,
+    ShowOrRemoveTables,
     GetSingleTableInfo(String),
     SetSingleTableInfo,
     UndisplayTableInfo,
