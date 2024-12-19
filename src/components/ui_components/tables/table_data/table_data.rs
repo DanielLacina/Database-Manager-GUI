@@ -349,17 +349,17 @@ fn update_table_data_button_style() -> button::Style {
 
 fn add_table_row_button_style() -> button::Style {
     button::Style {
-        background: Some(Background::Color(Color::from_rgb(0.0, 0.7, 0.8))), // Light turquoise-blue background
+        background: Some(Background::Color(Color::from_rgb(0.0, 0.8, 1.0))), // Vibrant turquoise-blue background
         border: Border {
-            color: Color::from_rgb(0.0, 0.9, 1.0), // Bright turquoise-blue border
-            width: 2.0,
-            radius: Radius::from(8.0), // Rounded corners
+            color: Color::from_rgb(0.0, 1.0, 1.0), // Bright cyan border
+            width: 3.0,                            // Slightly thicker border for emphasis
+            radius: Radius::from(12.0),            // More rounded corners
         },
-        text_color: Color::from_rgb(0.9, 1.0, 1.0), // Soft white-turquoise text for contrast
+        text_color: Color::from_rgb(1.0, 1.0, 1.0), // Pure white text for maximum contrast
         shadow: Shadow {
-            color: Color::from_rgba(0.0, 0.8, 1.0, 0.3), // Subtle lighter turquoise-blue glow
-            offset: Vector::new(0.0, 4.0),               // Slight vertical shadow offset
-            blur_radius: 5.0,                            // Smooth shadow edges
+            color: Color::from_rgba(0.0, 1.0, 1.0, 0.5), // Glow effect with a vibrant cyan color
+            offset: Vector::new(0.0, 6.0),               // Increased vertical shadow offset
+            blur_radius: 10.0,                           // More prominent shadow blur
         },
     }
 }
